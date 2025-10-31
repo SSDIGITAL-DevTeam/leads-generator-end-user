@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-100 text-slate-700 font-sans antialiased;
+}
+
+a {
+  @apply text-brand-primary transition-colors duration-200 ease-in-out;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  @apply outline-none ring-2 ring-brand-primary ring-offset-2 ring-offset-white;
+}

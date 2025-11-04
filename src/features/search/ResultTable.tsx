@@ -1,19 +1,52 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { DataTable } from "@/_components/DataTable";
 import { Button } from "@/_components/ui/Button";
 import { Badge } from "@/_components/ui/Badge";
 import { formatLocation } from "@/lib/helpers";
 import type { BusinessLead } from "@/types/business";
+import Image from "next/image";
 
 interface ResultTableProps {
   data: BusinessLead[];
   total: number;
+  // optional: kalau mau download semua hasil filter dari parent
+  fullData?: BusinessLead[];
 }
 
-export const ResultTable = ({ data, total }: ResultTableProps) => {
+export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
+  // ⬇️ state pencarian lokal
+  const [search, setSearch] = useState("");
+
+  // fungsi cocokkan
+  const filtered = useMemo(() => {
+    if (!search.trim()) return data;
+    const q = search.trim().toLowerCase();
+
+    return data.filter((lead) => {
+      const company = lead.company?.toLowerCase() ?? "";
+      const name = lead.name?.toLowerCase() ?? "";
+      const email = lead.email?.toLowerCase() ?? "";
+      const phone = lead.phone?.toLowerCase() ?? "";
+      const website = lead.website?.toLowerCase() ?? "";
+      const industry = lead.industry?.toLowerCase() ?? "";
+      const loc = formatLocation(lead).toLowerCase();
+
+      return (
+        company.includes(q) ||
+        name.includes(q) ||
+        email.includes(q) ||
+        phone.includes(q) ||
+        website.includes(q) ||
+        industry.includes(q) ||
+        loc.includes(q)
+      );
+    });
+  }, [data, search]);
+
+  // ⬇️ kolom tabel (perbaiki key duplikat: pakai "city" & "country")
   const columns = useMemo(
     () => [
       {
@@ -39,39 +72,16 @@ export const ResultTable = ({ data, total }: ResultTableProps) => {
               href={lead.linkedin}
               target="_blank"
               rel="noreferrer"
-              className="text-brand-primary transition hover:text-blue-700"
+              className="inline-flex items-center text-brand-primary transition hover:text-blue-700"
               aria-label={`${lead.name} LinkedIn`}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="h-5 w-5"
-              >
-                <path d="M4.98 3.5a2.5 2.5 0 1 1-.02 5 2.5 2.5 0 0 1 .02-5zM3 8.98h4v12.02H3zM9.5 8.98h3.83v1.64h.05c.53-1 1.82-2.06 3.75-2.06 4 0 4.74 2.63 4.74 6.05v6.39h-4v-5.67c0-1.35-.03-3.07-1.87-3.07-1.87 0-2.15 1.46-2.15 2.97v5.77h-4z" />
-              </svg>
-            </a>
-            <a
-              href={lead.website}
-              target="_blank"
-              rel="noreferrer"
-              className="text-brand-primary transition hover:text-blue-700"
-              aria-label={`${lead.name} website`}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                className="h-5 w-5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 3a9 9 0 1 0 9 9m0 0h-9m9 0a9 9 0 0 0-9-9v9"
-                />
-              </svg>
+              <Image
+                src="/assets/icons/link.svg"
+                alt={`${lead.name} Link`}
+                width={30}
+                height={30}
+                className=" flex items-center object-contain"
+              />
             </a>
           </div>
         ),
@@ -82,7 +92,6 @@ export const ResultTable = ({ data, total }: ResultTableProps) => {
         render: (lead: BusinessLead) => (
           <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-700">
             <svg
-              xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="currentColor"
               className="h-4 w-4 text-amber-400"
@@ -120,15 +129,8 @@ export const ResultTable = ({ data, total }: ResultTableProps) => {
         header: "Address",
       },
       {
-        key: "location",
-        header: "City",
-        render: (lead: BusinessLead) => (
-          <span className="text-sm text-slate-600">{formatLocation(lead)}</span>
-        ),
-      },
-      {
-        key: "location",
-        header: "Country",
+        key: "city",
+        header: "location",
         render: (lead: BusinessLead) => (
           <span className="text-sm text-slate-600">{formatLocation(lead)}</span>
         ),
@@ -142,17 +144,17 @@ export const ResultTable = ({ data, total }: ResultTableProps) => {
       <div className="px-4 py-5 md:px-6">
         {/* Baris pertama: judul + subtext */}
         <div>
-          <h3 className="text-base font-semibold text-slate-900 pt-3">
+          <h3 className="pt-3 text-base font-semibold text-slate-900">
             Result
           </h3>
-          <p className="mt-1 text-sm text-slate-500 py-3">
-            {data.length} leads found from {total} total entries.
+          <p className="py-3 text-sm text-slate-500">
+            {filtered.length} leads found from {total} total entries.
           </p>
         </div>
 
         {/* Baris kedua: search + download */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          {/* Search box (boleh kamu sambungkan ke state/filter nanti) */}
+          {/* Search box */}
           <div className="relative w-full md:w-72">
             <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
               <svg
@@ -167,29 +169,72 @@ export const ResultTable = ({ data, total }: ResultTableProps) => {
               </svg>
             </span>
             <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               type="text"
               placeholder="Search Here"
               className="h-10 w-full rounded-md border border-[#D8DDE7] bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-[#2E65FF] focus:ring-2 focus:ring-[#2E65FF]/10"
             />
           </div>
 
-          {/* Tombol Download (pakai logic dari kode pertama) */}
+          {/* Tombol Download */}
           <Button
             type="button"
-            className="rounded-md bg-[#2E65FF] px-4 py-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#2451CC]"
+            className="rounded-md !bg-[#2451CC] px-4 py-4 text-sm font-semibold text-white shadow-sm transition"
             onClick={() => {
-              const blob = new Blob([JSON.stringify(data, null, 2)], {
-                type: "application/json",
+              const rows =
+                fullData && fullData.length > 0 ? fullData : filtered;
+
+              const csvHeader = [
+                "Company",
+                "Industry",
+                "Name",
+                "Title",
+                "Phone",
+                "Email",
+                "Website",
+                "LinkedIn",
+                "Rating",
+                "Location",
+              ];
+
+              const escape = (val: unknown) => {
+                if (val === null || val === undefined) return "";
+                const str = String(val);
+                return /[",\n]/.test(str)
+                  ? `"${str.replace(/"/g, '""')}"`
+                  : str;
+              };
+
+              const csvBody = rows
+                .map((lead) => {
+                  return [
+                    escape(lead.company),
+                    escape(lead.industry),
+                    escape(lead.name),
+                    escape(lead.title),
+                    escape(lead.phone),
+                    escape(lead.email),
+                    escape(lead.website),
+                    escape(lead.linkedin),
+                    escape(lead.rating?.toFixed?.(1) ?? ""),
+                    escape(formatLocation(lead)),
+                  ].join(",");
+                })
+                .join("\n");
+
+              const csv = [csvHeader.join(","), csvBody].join("\n");
+              const blob = new Blob([csv], {
+                type: "text/csv;charset=utf-8;",
               });
               const url = URL.createObjectURL(blob);
               const element = document.createElement("a");
               element.href = url;
-              element.download = "leads.json";
+              element.download = "leads.csv";
               element.click();
               URL.revokeObjectURL(url);
             }}
           >
-            {/* ⬇️ ini yang bikin pasti 1 baris */}
             <span className="flex items-center gap-2">
               <svg
                 viewBox="0 0 24 24"
@@ -209,72 +254,18 @@ export const ResultTable = ({ data, total }: ResultTableProps) => {
                   strokeLinejoin="round"
                 />
               </svg>
-              <span className="leading-none">Download Data</span>
+              <span className="leading-none">Download CSV</span>
             </span>
           </Button>
         </div>
       </div>
+
+      {/* tabel pakai hasil filter */}
       <DataTable
-        data={data}
+        data={filtered}
         columns={columns}
         emptyState="No leads match the selected filters."
       />
-      <div className="flex flex-col gap-3 rounded-b-xl bg-white px-4 py-4 text-xs text-slate-500 md:flex-row md:items-center md:justify-between md:px-6">
-        {/* kiri: showing */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-500">Showing</span>
-          <select
-            className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none"
-            defaultValue={10}
-          >
-            <option value={10}>10</option>
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-          </select>
-          <span className="text-[11px] text-slate-500">from {total} data</span>
-        </div>
-
-        {/* kanan: pagination controls */}
-        <div className="flex items-center gap-1 text-[11px] text-slate-500">
-          {/* first */}
-          <button className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-slate-100">
-            «
-          </button>
-          {/* prev */}
-          <button className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-slate-100">
-            ‹
-          </button>
-
-          {/* page numbers */}
-          <button className="flex h-7 w-7 items-center justify-center rounded-md bg-[#2E65FF] text-white">
-            2
-          </button>
-          <button className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-slate-100">
-            3
-          </button>
-          <span className="px-1">…</span>
-          <button className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-slate-100">
-            27
-          </button>
-
-          {/* next */}
-          <button className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-slate-100">
-            ›
-          </button>
-          {/* last */}
-          <button className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-slate-100">
-            »
-          </button>
-
-          {/* checkbox / empty square di ujung kanan */}
-          <button className="ml-2 flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white" />
-
-          {/* Go >> */}
-          <button className="ml-1 text-[11px] font-medium text-[#2E65FF] hover:underline">
-            Go &gt;&gt;
-          </button>
-        </div>
-      </div>
     </section>
   );
 };

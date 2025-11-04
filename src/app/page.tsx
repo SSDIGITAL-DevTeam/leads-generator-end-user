@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Topbar } from "@/_components/Topbar";
 import { buttonStyles } from "@/_components/ui/Button";
@@ -8,19 +8,206 @@ import { Modal } from "@/_components/ui/Modal";
 import { useAuth } from "@/features/auth/useAuth";
 import { useModal } from "@/hooks/useModal";
 import { cn } from "@/lib/utils";
-import { DataTable } from "@/_components/DataTable";
 import { businessLeads } from "@/lib/mockData";
 import { useFilters } from "@/features/search/useFilters";
 import { ResultTable } from "@/features/search/ResultTable";
+import { Pagination } from "@/_components/ui/Pagination";
 
+const DEFAULT_PAGE_SIZE = 10;
+
+/* -------------------------------------------------------------------------- */
+/*  SearchableSelect (dropdown + search, no library)                          */
+/* -------------------------------------------------------------------------- */
+interface SearchableSelectProps {
+  label: string;
+  placeholder?: string;
+  value?: string;
+  onSelect: (value: string | undefined) => void;
+  options: string[];
+  disabled?: boolean;
+}
+
+function SearchableSelect({
+  label,
+  placeholder = "Type to search...",
+  value,
+  onSelect,
+  options,
+  disabled,
+}: SearchableSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  // tutup kalau klik di luar
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // filter berdasarkan query
+  const filteredOptions = useMemo(() => {
+    if (!query.trim()) return options;
+    const q = query.toLowerCase();
+    return options.filter((opt) => opt.toLowerCase().includes(q));
+  }, [options, query]);
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <label className="mb-1 block text-xs font-semibold text-slate-700">
+        {label}
+      </label>
+
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((prev) => !prev);
+        }}
+        className={cn(
+          "flex h-10 w-full items-center justify-between gap-2 rounded-full border border-[#C7D5FF] bg-white px-4 text-left text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20",
+          disabled && "cursor-not-allowed bg-slate-100 text-slate-400"
+        )}
+      >
+        <span className={cn(!value && "text-slate-400")}>
+          {value || placeholder}
+        </span>
+        <span className="flex items-center gap-1">
+          {value ? (
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(undefined);
+                setQuery("");
+              }}
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[10px] text-slate-700 hover:bg-slate-300"
+            >
+              ×
+            </span>
+          ) : null}
+          <svg
+            viewBox="0 0 24 24"
+            className={cn(
+              "h-4 w-4 transition",
+              open ? "rotate-180" : "rotate-0"
+            )}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.7}
+          >
+            <path d="m6 9 6 6 6-6" strokeLinecap="round" />
+          </svg>
+        </span>
+      </button>
+
+      {/* dropdown panel */}
+      {open && !disabled ? (
+        <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+          {/* input search */}
+          <div className="p-2">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search…"
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/10"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            {filteredOptions.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-slate-400">
+                No results found
+              </p>
+            ) : (
+              filteredOptions.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    onSelect(opt);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100",
+                    opt === value && "bg-slate-100 font-medium"
+                  )}
+                >
+                  {opt}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 
 const LandingPage = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const { isOpen, open, close } = useModal(false);
 
-    const { filters, filteredData, setFilter, resetFilters } =
-      useFilters(businessLeads);
+  const { filters, filteredData, setFilter, resetFilters } =
+    useFilters(businessLeads);
 
+  // ⬇️ pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  // buat list negara unik dari data mock
+  const countryOptions = useMemo(() => {
+    const set = new Set<string>();
+    businessLeads.forEach((item) => {
+      if (item.country) set.add(item.country);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, []);
+
+  // buat list kota unik tergantung country yang dipilih
+  const cityOptions = useMemo(() => {
+    // kalau belum pilih country → ambil semua city (atau bisa dikosongin)
+    if (!filters.country) {
+      const set = new Set<string>();
+      businessLeads.forEach((item) => {
+        if (item.city) set.add(item.city);
+      });
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }
+
+    // kalau sudah pilih country → ambil city khusus country itu
+    const set = new Set<string>();
+    businessLeads.forEach((item) => {
+      if (item.country === filters.country && item.city) {
+        set.add(item.city);
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [filters.country]);
+
+  // kalau filter berubah ATAU page size berubah -> balikin ke page 1
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredData.length, pageSize]);
+
+  // data yang ditampilkan di tabel (sudah dipotong sesuai page + pageSize)
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return filteredData.slice(start, end);
+  }, [filteredData, currentPage, pageSize]);
+
+  // buka modal kalau belum login
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
@@ -65,7 +252,6 @@ const LandingPage = () => {
 
       {/* WRAPPER HALAMAN */}
       <main className="min-h-screen bg-[#E9ECF3]">
-        {/* TOPBAR GELAP (sudah punya komponen) */}
         <Topbar />
 
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pb-12 pt-8 lg:px-0">
@@ -107,11 +293,9 @@ const LandingPage = () => {
 
           {/* FILTERS SECTION */}
           <section className="overflow-hidden">
-            {/* header atas putih */}
-            <header className="flex items-center justify-between gap-2 bg-white px-6 py-4 rounded-xl">
+            <header className="flex items-center justify-between gap-2 rounded-xl bg-white px-6 py-4">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3366FF]/10 text-[#3366FF]">
-                  {/* icon filter */}
                   <svg
                     viewBox="0 0 24 24"
                     className="h-4 w-4"
@@ -127,7 +311,6 @@ const LandingPage = () => {
                 <p className="text-sm font-semibold text-slate-800">Filters</p>
               </div>
               <button className="text-slate-400 transition hover:text-slate-500">
-                {/* panah collapse */}
                 <svg
                   viewBox="0 0 24 24"
                   className="h-5 w-5"
@@ -144,12 +327,10 @@ const LandingPage = () => {
               </button>
             </header>
 
-            {/* body abu-abu muda seperti gambar */}
-            <div className=" px-6 pb-6 pt-4">
-              {/* judul data filter dengan icon lingkaran */}
+            <div className="px-6 pb-6 pt-4">
+              {/* filter formnya boleh kamu sambungin ke useFilters */}
               <div className="mb-5 flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#3366FF]/30 text-[#3366FF]">
-                  {/* icon semacam refresh/filter */}
                   <svg
                     viewBox="0 0 24 24"
                     className="h-4 w-4"
@@ -181,79 +362,89 @@ const LandingPage = () => {
                 </div>
               </div>
 
-              {/* 2 kolom persis seperti gambar */}
               <div className="grid gap-6 lg:grid-cols-2">
-                {/* kolom kiri: input panjang */}
                 <div className="space-y-4">
-                  {/* Type Business */}
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">
                       Type Business
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g., Marketing Manager, Founder"
+                      value={filters.businessType || ""}
+                      onChange={(e) => setFilter("businessType", e.target.value)}
+                      placeholder="e.g., Agency, Retail, Software"
                       className="h-10 w-full rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20"
                     />
                   </div>
 
-                  {/* Rating */}
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">
                       Rating
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g., San Francisco"
+                      value={filters.rating || ""}
+                      onChange={(e) => setFilter("rating", e.target.value)}
+                      placeholder="e.g., 4.5"
                       className="h-10 w-full rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20"
                     />
                   </div>
                 </div>
 
-                {/* kolom kanan: city & country */}
                 <div className="space-y-4">
-                  {/* City */}
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g., Berlin"
-                      className="h-10 w-full rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20"
-                    />
-                  </div>
+                  {/* Country jadi dropdown searchable */}
+                  <SearchableSelect
+                    label="Country"
+                    value={filters.country || ""}
+                    onSelect={(val) => {
+                      // kalau country diganti, city harus direset
+                      setFilter("country", val || "");
+                      setFilter("city", "");
+                    }}
+                    options={countryOptions}
+                    placeholder="Select country…"
+                  />
 
-                  {/* Country */}
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-slate-700">
-                      Country
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g., Germany"
-                      className="h-10 w-full rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20"
-                    />
-                  </div>
+                  {/* City jadi dropdown searchable, tergantung country */}
+                  <SearchableSelect
+                    label="City"
+                    value={filters.city || ""}
+                    onSelect={(val) => {
+                      setFilter("city", val || "");
+                    }}
+                    options={cityOptions}
+                    placeholder={
+                      filters.country
+                        ? "Select city…"
+                        : "Select country first…"
+                    }
+                    disabled={!filters.country && cityOptions.length === 0}
+                  />
                 </div>
               </div>
 
-              {/* bar tombol bawah */}
               <div className="mt-6 flex flex-col gap-3 lg:flex-row">
-                <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#3366FF] bg-white px-6 text-sm font-semibold text-[#1F3F7F] transition hover:bg-[#f3f5ff] lg:w-[230px]">
-                  {/* icon clear */}
+                <button
+                  onClick={() => {
+                    resetFilters();
+                    setCurrentPage(1);
+                  }}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#3366FF] bg-white px-6 text-sm font-semibold text-[#1F3F7F] transition hover:bg-[#f3f5ff] lg:w-[230px]"
+                >
                   <span className="flex h-7 w-7 items-center justify-center rounded-md bg-[#EEF0F6] text-base">
                     🧹
                   </span>
                   CLEAR ALL FILTERS
                 </button>
                 <button
-                  // kalau belum login panggil modal
                   onClick={() => {
-                    // nanti di-isi dari parent
-                    // if (!isAuthenticated) open();
+                    if (!isAuthenticated) {
+                      open();
+                      return;
+                    }
+                    // TODO: kalau sudah login, panggil fetch real backend di sini
                   }}
-                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-[#2E65FF] text-sm font-semibold text-white transition hover:bg-[#2050CC]"
+                  className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-[#2451CC] text-sm font-semibold text-white transition hover:bg-[#2050CC]"
                 >
                   <span className="text-lg leading-none">🔍</span>
                   SEARCH DATABASE
@@ -264,10 +455,18 @@ const LandingPage = () => {
 
           {/* RESULT SECTION */}
           <section className="rounded-xl bg-white shadow-sm">
-            {/* table */}
             <div className="w-full overflow-x-auto">
-              <ResultTable data={filteredData} total={businessLeads.length} />
+              <ResultTable data={paginatedData} total={filteredData.length} />
             </div>
+
+            {/* Pagination */}
+            <Pagination
+              totalItems={filteredData.length}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+            />
           </section>
         </div>
       </main>

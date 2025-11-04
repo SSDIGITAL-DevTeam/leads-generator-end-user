@@ -18,7 +18,7 @@ interface DataTableProps<T> {
 export const DataTable = <T extends object>({
   data,
   columns,
-  emptyState
+  emptyState,
 }: DataTableProps<T>) => {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-100">
@@ -26,9 +26,9 @@ export const DataTable = <T extends object>({
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50/80">
             <tr>
-              {columns.map((column) => (
+              {columns.map((column, colIdx) => (
                 <th
-                  key={String(column.key)}
+                  key={`${String(column.key)}-head-${colIdx}`}
                   scope="col"
                   className={cn(
                     "px-5 py-4 text-left text-sm font-semibold uppercase tracking-wide text-slate-500",
@@ -51,25 +51,25 @@ export const DataTable = <T extends object>({
                 </td>
               </tr>
             ) : (
-              data.map((row, idx) => (
+              data.map((row, rowIdx) => (
                 <tr
-                  key={(row as { id?: string }).id ?? idx}
+                  key={(row as { id?: string }).id ?? rowIdx}
                   className={cn(
                     "transition-colors duration-200 ease-in-out",
-                    idx % 2 === 0 ? "bg-white" : "bg-slate-50/40",
+                    rowIdx % 2 === 0 ? "bg-white" : "bg-slate-50/40",
                     "hover:bg-brand-primary/5"
                   )}
                 >
-                  {columns.map((column) => (
+                  {columns.map((column, colIdx) => (
                     <td
-                      key={String(column.key)}
+                      key={`${String(column.key)}-cell-${rowIdx}-${colIdx}`}
                       className={cn(
                         "px-5 py-4 text-sm text-slate-600",
                         column.className
                       )}
                     >
                       {column.render
-                        ? column.render(row, idx)
+                        ? column.render(row, rowIdx)
                         : ((row as Record<string, unknown>)[
                             column.key as string
                           ] as React.ReactNode)}

@@ -12,15 +12,13 @@ import Image from "next/image";
 interface ResultTableProps {
   data: BusinessLead[];
   total: number;
-  // optional: kalau mau download semua hasil filter dari parent
   fullData?: BusinessLead[];
 }
 
 export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
-  // ⬇️ state pencarian lokal
   const [search, setSearch] = useState("");
 
-  // fungsi cocokkan
+  // filter lokal
   const filtered = useMemo(() => {
     if (!search.trim()) return data;
     const q = search.trim().toLowerCase();
@@ -30,8 +28,14 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
       const name = lead.name?.toLowerCase() ?? "";
       const email = lead.email?.toLowerCase() ?? "";
       const phone = lead.phone?.toLowerCase() ?? "";
-      const website = lead.website?.toLowerCase() ?? "";
-      const industry = lead.industry?.toLowerCase() ?? "";
+      const website =
+        (lead as any)?.website?.toLowerCase?.() ??
+        (lead as any)?.links?.website?.toLowerCase?.() ??
+        "";
+      const typeBusiness =
+        (lead as any).type_business?.toLowerCase?.() ??
+        lead.industry?.toLowerCase?.() ??
+        "";
       const loc = formatLocation(lead).toLowerCase();
 
       return (
@@ -40,109 +44,134 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         email.includes(q) ||
         phone.includes(q) ||
         website.includes(q) ||
-        industry.includes(q) ||
+        typeBusiness.includes(q) ||
         loc.includes(q)
       );
     });
   }, [data, search]);
 
-  // ⬇️ kolom tabel (perbaiki key duplikat: pakai "city" & "country")
+  // kolom disamakan dengan project lain
   const columns = useMemo(
     () => [
+      // 1. Company → di project lain dia pakai lead.name sebagai judul
       {
-        key: "company",
+        key: "company-col",
         header: "Company",
         render: (lead: BusinessLead) => (
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-700">{lead.company}</p>
-            <Badge tone="brand">{lead.industry}</Badge>
-          </div>
+          <p className="text-sm font-semibold text-slate-900">
+            {/* project lain pakai lead.name di kolom company */}
+            {lead.name || lead.company || "-"}
+          </p>
         ),
       },
+      // 2. Phone
       {
         key: "phone",
         header: "Phone",
+        render: (lead: BusinessLead) => (
+          <span className="text-sm text-slate-700">
+            {lead.phone || "-"}
+          </span>
+        ),
       },
+      // 3. Links → project lain cuma munculin website
       {
         key: "links",
         header: "Links",
-        render: (lead: BusinessLead) => (
-          <div className="flex items-center gap-3">
+        render: (lead: BusinessLead) => {
+          const website =
+            (lead as any).website ||
+            (lead as any).links?.website ||
+            (lead as any).linkedin;
+          if (!website) {
+            return <span className="text-xs text-slate-400">-</span>;
+          }
+          return (
             <a
-              href={lead.linkedin}
+              href={website}
               target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center text-brand-primary transition hover:text-blue-700"
-              aria-label={`${lead.name} LinkedIn`}
+              rel="noopener noreferrer"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+              aria-label={`Visit ${lead.company || lead.name || "lead"} website`}
             >
               <Image
                 src="/assets/icons/link.svg"
-                alt={`${lead.name} Link`}
-                width={30}
-                height={30}
-                className=" flex items-center object-contain"
+                alt="Website"
+                width={18}
+                height={18}
+                className="inline-block"
               />
             </a>
-          </div>
-        ),
+          );
+        },
       },
+      // 4. Rating
       {
         key: "rating",
         header: "Rating",
         render: (lead: BusinessLead) => (
-          <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-700">
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="h-4 w-4 text-amber-400"
-            >
-              <path d="M12 2l2.9 5.88 6.49.94-4.7 4.58 1.11 6.47L12 17.77l-5.8 3.1 1.11-6.47-4.7-4.58 6.49-.94L12 2z" />
-            </svg>
-            {lead.rating.toFixed(1)}
+          <span className="text-sm text-slate-700">
+            {typeof lead.rating === "number"
+              ? lead.rating.toFixed(1)
+              : lead.rating || "0.0"}
           </span>
         ),
       },
+      // 5. Reviews
       {
-        key: "name",
+        key: "reviews",
         header: "Reviews",
         render: (lead: BusinessLead) => (
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-slate-900">{lead.name}</p>
-            <p className="text-xs text-slate-500">{lead.title}</p>
-          </div>
+          <span className="text-sm text-slate-700">
+            {(lead as any).reviews ?? "-"}
+          </span>
         ),
       },
+      // 6. Type Bussiness
       {
-        key: "email",
-        header: "Business Type",
-        render: (lead: BusinessLead) => (
-          <a
-            href={`mailto:${lead.email}`}
-            className="text-sm text-brand-primary"
-          >
-            {lead.email}
-          </a>
-        ),
+        key: "type_business",
+        header: "Type Bussiness",
+        render: (lead: BusinessLead) => {
+          const typeB =
+            (lead as any).type_business || lead.industry || lead.title;
+          return typeB ? (
+            <Badge>{typeB}</Badge>
+          ) : (
+            <span className="text-xs text-slate-400">-</span>
+          );
+        },
       },
+      // 7. Address → di project lain dia pakai lead.company di kolom ini
       {
-        key: "size",
+        key: "address",
         header: "Address",
-      },
-      {
-        key: "city",
-        header: "location",
         render: (lead: BusinessLead) => (
-          <span className="text-sm text-slate-600">{formatLocation(lead)}</span>
+          <span className="text-sm text-slate-700">
+            {(lead as any).address || lead.company || "-"}
+          </span>
+        ),
+      },
+      // 8. Location
+      {
+        key: "location",
+        header: "Location",
+        render: (lead: BusinessLead) => (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-700">
+              {formatLocation(lead)}
+            </span>
+          </div>
         ),
       },
     ],
     []
   );
 
+  const showEmptyOnlyHeader = filtered.length === 0;
+
   return (
     <section className="space-y-4">
       <div className="px-4 py-5 md:px-6">
-        {/* Baris pertama: judul + subtext */}
         <div>
           <h3 className="pt-3 text-base font-semibold text-slate-900">
             Result
@@ -152,9 +181,8 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
           </p>
         </div>
 
-        {/* Baris kedua: search + download */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          {/* Search box */}
+          {/* search */}
           <div className="relative w-full md:w-72">
             <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
               <svg
@@ -177,7 +205,7 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
             />
           </div>
 
-          {/* Tombol Download */}
+          {/* download */}
           <Button
             type="button"
             className="rounded-md !bg-[#2451CC] px-4 py-4 text-sm font-semibold text-white shadow-sm transition"
@@ -185,16 +213,15 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
               const rows =
                 fullData && fullData.length > 0 ? fullData : filtered;
 
+              // header disamakan dengan tabel project lain
               const csvHeader = [
                 "Company",
-                "Industry",
-                "Name",
-                "Title",
                 "Phone",
-                "Email",
-                "Website",
-                "LinkedIn",
+                "Links",
                 "Rating",
+                "Reviews",
+                "Type Bussiness",
+                "Address",
                 "Location",
               ];
 
@@ -202,22 +229,34 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
                 if (val === null || val === undefined) return "";
                 const str = String(val);
                 return /[",\n]/.test(str)
-                  ? `"${str.replace(/"/g, '""')}"`
+                  ? `"${str.replace(/"/g, '""')}"` 
                   : str;
               };
 
               const csvBody = rows
                 .map((lead) => {
+                  const website =
+                    (lead as any).website ||
+                    (lead as any).links?.website ||
+                    (lead as any).linkedin ||
+                    "";
                   return [
-                    escape(lead.company),
-                    escape(lead.industry),
-                    escape(lead.name),
-                    escape(lead.title),
-                    escape(lead.phone),
-                    escape(lead.email),
-                    escape(lead.website),
-                    escape(lead.linkedin),
-                    escape(lead.rating?.toFixed?.(1) ?? ""),
+                    escape(lead.name || lead.company || ""),
+                    escape(lead.phone || ""),
+                    escape(website),
+                    escape(
+                      typeof lead.rating === "number"
+                        ? lead.rating.toFixed(1)
+                        : lead.rating || ""
+                    ),
+                    escape((lead as any).reviews ?? ""),
+                    escape(
+                      (lead as any).type_business ||
+                        lead.industry ||
+                        lead.title ||
+                        ""
+                    ),
+                    escape((lead as any).address || lead.company || ""),
                     escape(formatLocation(lead)),
                   ].join(",");
                 })
@@ -260,11 +299,11 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         </div>
       </div>
 
-      {/* tabel pakai hasil filter */}
+      {/* tabel */}
       <DataTable
         data={filtered}
         columns={columns}
-        emptyState="No leads match the selected filters."
+        emptyState={showEmptyOnlyHeader ? null : undefined}
       />
     </section>
   );

@@ -1,21 +1,29 @@
+// src/app/api/companies/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_API_URL =
-  process.env.BACKEND_API_URL || "http://localhost:8080";
+const BACKEND_BASE =
+  process.env.SCRAPER_API_URL?.replace(/\/$/, "") ||
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:8888/api";
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const qs = searchParams.toString();
-  const url = qs
-    ? `${BACKEND_API_URL}/companies?${qs}`
-    : `${BACKEND_API_URL}/companies`;
+// ganti ke endpoint backend-mu yang ngelist hasil scraping
+const COMPANIES_PATH = "/companies";
 
-  const res = await fetch(url, {
-    // endpoint ini public di Go
+export async function GET(_req: NextRequest) {
+  const res = await fetch(`${BACKEND_BASE}${COMPANIES_PATH}`, {
     method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    // kalau butuh auth, tambah di sini
   });
 
-  const data = await res.json().catch(() => ({}));
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch (e) {
+    data = [];
+  }
 
   return NextResponse.json(data, { status: res.status });
 }

@@ -14,13 +14,13 @@ const RegisterPage = () => {
   const { login } = useAuth();
   const { isLoading } = useProtectedRoute({
     requireAuth: false,
-    redirectTo: "/dashboard"
+    redirectTo: "/dashboard",
   });
 
   const [formState, setFormState] = useState({
     email: "",
     password: "",
-    confirmPassword: ""
+    confirmPassword: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,27 +34,49 @@ const RegisterPage = () => {
     event.preventDefault();
     setError(null);
 
-    if (!formState.email || !formState.password || !formState.confirmPassword) {
+    const email = formState.email.trim();
+    const password = formState.password.trim();
+    const confirmPassword = formState.confirmPassword.trim();
+
+    if (!email || !password || !confirmPassword) {
       setError("All fields are required.");
       return;
     }
 
-    if (formState.password !== formState.confirmPassword) {
+    if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
     }
 
-    if (formState.password.length < 6) {
+    if (password.length < 6) {
       setError("Password should be at least 6 characters long.");
       return;
     }
 
+    if (isSubmitting) return;
+
     try {
       setIsSubmitting(true);
-      await login({
-        email: formState.email,
-        password: formState.password
+
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
+
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        // kalau route Next.js tadi kirim backendStatus/backendBody, tampilkan
+        const msg =
+          payload?.message ||
+          payload?.backendBody?.message ||
+          "Unable to register. Please try again.";
+        throw new Error(msg);
+      }
+
+      // kalau sampai sini sukses → langsung login ke context
+      await login({ email, password });
       router.push("/dashboard");
     } catch (registrationError) {
       setError(
@@ -82,7 +104,7 @@ const RegisterPage = () => {
             Join the Lead Generator and start discovering new opportunities.
           </p>
         </div>
-        <form className="space-y-5" onSubmit={handleSubmit}>
+        <form className="space-y-5" onSubmit={handleSubmit} noValidate>
           <div className="space-y-2">
             <label
               htmlFor="email"
@@ -98,6 +120,8 @@ const RegisterPage = () => {
               value={formState.email}
               onChange={handleChange}
               autoComplete="email"
+              disabled={isSubmitting}
+              required
             />
           </div>
           <div className="space-y-2">
@@ -115,6 +139,8 @@ const RegisterPage = () => {
               value={formState.password}
               onChange={handleChange}
               autoComplete="new-password"
+              disabled={isSubmitting}
+              required
             />
           </div>
           <div className="space-y-2">
@@ -132,6 +158,8 @@ const RegisterPage = () => {
               value={formState.confirmPassword}
               onChange={handleChange}
               autoComplete="new-password"
+              disabled={isSubmitting}
+              required
             />
           </div>
           {error && (
@@ -139,7 +167,12 @@ const RegisterPage = () => {
               {error}
             </div>
           )}
-          <Button type="submit" className="w-full" isLoading={isSubmitting}>
+          <Button
+            type="submit"
+            className="w-full"
+            isLoading={isSubmitting}
+            disabled={isSubmitting}
+          >
             Create Account
           </Button>
         </form>

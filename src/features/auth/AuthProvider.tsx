@@ -6,60 +6,81 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState
+  useState,
 } from "react";
-
 import type { AuthContextValue, LoginPayload, User } from "./types";
+import {
+  loginToBackend,
+  registerToBackend,
+} from "@/lib/api";
 
 const AUTH_TOKEN_KEY = "app_token";
 const AUTH_USER_KEY = "app_user";
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const AuthContext = createContext<AuthContextValue | null>(null);
 
-interface AuthProviderProps {
-  children: React.ReactNode;
-}
-
-const staticUserName = "Dafa Aulia";
-
-export const AuthProvider = ({ children }: AuthProviderProps) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // load dari localStorage pas awal
   useEffect(() => {
-    const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
-    const storedUser = window.localStorage.getItem(AUTH_USER_KEY);
-
-    if (token && storedUser) {
+    if (typeof window === "undefined") return;
+    const savedToken = window.localStorage.getItem(AUTH_TOKEN_KEY);
+    const savedUser = window.localStorage.getItem(AUTH_USER_KEY);
+    if (savedToken && savedUser) {
       try {
-        const parsedUser: User = JSON.parse(storedUser);
-        setUser(parsedUser);
-      } catch (error) {
-        window.localStorage.removeItem(AUTH_TOKEN_KEY);
-        window.localStorage.removeItem(AUTH_USER_KEY);
-        console.error("Failed to parse stored user", error);
+        setUser(JSON.parse(savedUser));
+      } catch {
+        setUser(null);
       }
     }
     setIsLoading(false);
   }, []);
 
-  const login = useCallback(async (payload: LoginPayload) => {
-    if (!payload.email || !payload.password) {
-      throw new Error("Email and password are required");
-    }
+  const login = useCallback(
+    async ({ email, password }: LoginPayload) => {
+      // call route Next.js → teruskan ke Go
+      const token = await loginToBackend(email, password);
 
-    const token = crypto.randomUUID();
-    const authenticatedUser: User = {
-      name: staticUserName,
-      email: payload.email
-    };
+      const authenticatedUser: User = {
+        // topbar butuh name → ambil dari email
+        name: email.split("@")[0],
+        email,
+      };
 
-    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-    window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(authenticatedUser));
-    setUser(authenticatedUser);
-  }, []);
+      window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+      window.localStorage.setItem(
+        AUTH_USER_KEY,
+        JSON.stringify(authenticatedUser)
+      );
+      setUser(authenticatedUser);
+    },
+    []
+  );
+
+  // register langsung ke backend, lalu auto-login
+  const register = useCallback(
+    async ({ email, password }: LoginPayload) => {
+      const token = await registerToBackend(email, password);
+
+      const authenticatedUser: User = {
+        name: email.split("@")[0],
+        email,
+      };
+
+      window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+      window.localStorage.setItem(
+        AUTH_USER_KEY,
+        JSON.stringify(authenticatedUser)
+      );
+      setUser(authenticatedUser);
+    },
+    []
+  );
 
   const logout = useCallback(() => {
+    if (typeof window === "undefined") return;
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
     window.localStorage.removeItem(AUTH_USER_KEY);
     setUser(null);
@@ -70,19 +91,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       user,
       isAuthenticated: Boolean(user),
       isLoading,
+      // override: login & logout; register kita selipin ke login page
       login,
-      logout
+      logout,
+      register,
     }),
-    [user, isLoading, login, logout]
+    [user, isLoading, login, logout, register]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuthContext = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuthContext must be used within an AuthProvider");
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuthContext must be used within AuthProvider");
+  return ctx;
 };

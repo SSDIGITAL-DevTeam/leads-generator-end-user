@@ -14,12 +14,12 @@ const LoginPage = () => {
   const { login } = useAuth();
   const { isLoading } = useProtectedRoute({
     requireAuth: false,
-    redirectTo: "/dashboard"
+    redirectTo: "/",
   });
 
   const [formState, setFormState] = useState({
     email: "",
-    password: ""
+    password: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,18 +33,24 @@ const LoginPage = () => {
     event.preventDefault();
     setError(null);
 
-    if (!formState.email || !formState.password) {
+    const email = formState.email.trim();
+    const password = formState.password.trim();
+
+    if (!email || !password) {
       setError("Please provide both email and password.");
       return;
     }
 
+    // cegah submit ganda
+    if (isSubmitting) return;
+
     try {
       setIsSubmitting(true);
       await login({
-        email: formState.email,
-        password: formState.password
+        email,
+        password,
       });
-      router.push("/dashboard");
+      router.push("/");
     } catch (authError) {
       setError(
         authError instanceof Error
@@ -56,6 +62,7 @@ const LoginPage = () => {
     }
   };
 
+  // biar nggak kedip pas hooknya lagi cek auth
   if (isLoading) {
     return null;
   }
@@ -71,7 +78,7 @@ const LoginPage = () => {
             Access your lead dashboard by signing in to your account.
           </p>
         </div>
-        <form className="space-y-5" onSubmit={handleSubmit}>
+        <form className="space-y-5" onSubmit={handleSubmit} noValidate>
           <div className="space-y-2">
             <label
               htmlFor="email"
@@ -87,6 +94,8 @@ const LoginPage = () => {
               placeholder="you@example.com"
               value={formState.email}
               onChange={handleChange}
+              disabled={isSubmitting}
+              required
             />
           </div>
           <div className="space-y-2">
@@ -104,6 +113,8 @@ const LoginPage = () => {
               placeholder="••••••••"
               value={formState.password}
               onChange={handleChange}
+              disabled={isSubmitting}
+              required
             />
           </div>
           {error && (
@@ -111,7 +122,12 @@ const LoginPage = () => {
               {error}
             </div>
           )}
-          <Button type="submit" className="w-full" isLoading={isSubmitting}>
+          <Button
+            type="submit"
+            className="w-full"
+            isLoading={isSubmitting}
+            disabled={isSubmitting}
+          >
             Sign In
           </Button>
         </form>

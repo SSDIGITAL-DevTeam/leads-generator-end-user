@@ -1,37 +1,66 @@
-// src/app/api/scrap/route.ts
+// src/app/api/scrape/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-// ini backend sebenernya — ganti ke URL service scrap kamu
-// misal kamu memang punya server di http://localhost:4000/api
-// tinggal ganti di sini
-const BACKEND_BASE =
-  process.env.SCRAPER_API_URL?.replace(/\/$/, "") ||
+const BACKEND_API_URL =
+  process.env.BACKEND_API_URL?.replace(/\/$/, "") ||
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:8888/api";
+  "http://localhost:8080";
 
-// kalau backend kamu endpoint-nya /scrape (pakai e) ubah ini:
-const SCRAPER_PATH = "/scrape";
-// kalau backend kamu /scrap juga, ya biarkan "/scrap"
+const SCRAPE_PATH = "/scrape";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
+  const payload = await req.json().catch(() => ({}));
 
-  // teruskan ke backend sebenernya
-  const res = await fetch(`${BACKEND_BASE}${SCRAPER_PATH}`, {
+  const incomingAuth = req.headers.get("authorization");
+  const cookieToken =
+    req.cookies.get("access_token")?.value ||
+    req.cookies.get("token")?.value ||
+    null;
+
+  // 🔴 DEBUG SERVER: lihat apa yang dikirim client
+  console.log("[SERVER] /api/scrape payload →", payload);
+  console.log("[SERVER] has auth? →", Boolean(incomingAuth || cookieToken));
+
+  if (!incomingAuth && !cookieToken) {
+    console.log("[SERVER] missing token → 401");
+    return NextResponse.json(
+      { message: "Unauthorized: token missing" },
+      { status: 401 }
+    );
+  }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (incomingAuth) {
+    headers["Authorization"] = incomingAuth;
+  } else if (cookieToken) {
+    headers["Authorization"] = `Bearer ${cookieToken}`;
+  }
+
+  const resp = await fetch(`${BACKEND_API_URL}${SCRAPE_PATH}`, {
     method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  const rawText = await resp.text();
+
+  // 🔴 DEBUG SERVER: lihat balasan backend asli
+  console.log("[SERVER] backend status →", resp.status);
+  console.log("[SERVER] backend raw →", rawText);
+
+  let data: any;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    data = { raw: rawText };
+  }
+
+  return new NextResponse(JSON.stringify(data), {
+    status: resp.status,
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
   });
-
-  // kalau backend balikin non-JSON kita tetap coba kirim balik
-  let data: any = null;
-  try {
-    data = await res.json();
-  } catch (e) {
-    data = { ok: res.ok };
-  }
-
-  return NextResponse.json(data, { status: res.status });
 }

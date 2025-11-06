@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Topbar } from "@/_components/Topbar";
 import { buttonStyles } from "@/_components/ui/Button";
@@ -15,139 +15,16 @@ import { Pagination } from "@/_components/ui/Pagination";
 
 const DEFAULT_PAGE_SIZE = 10;
 
-/* -------------------------------------------------------------------------- */
-/*  SearchableSelect (input + dropdown suggestion)                            */
-/* -------------------------------------------------------------------------- */
-interface SearchableSelectProps {
-  label: string;
-  placeholder?: string;
-  value?: string;
-  onSelect: (value: string | undefined) => void;
-  options: string[];
-  disabled?: boolean;
-}
-
-function SearchableSelect({
-  label,
-  placeholder = "Type to search...",
-  value,
-  onSelect,
-  options,
-  disabled,
-}: SearchableSelectProps) {
-  const [open, setOpen] = useState(false);
-  const [inputVal, setInputVal] = useState(value || "");
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    setInputVal(value || "");
-  }, [value]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (!wrapperRef.current) return;
-      if (!wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const filteredOptions = useMemo(() => {
-    if (!inputVal.trim()) return options;
-    const q = inputVal.toLowerCase();
-    return options.filter((opt) => opt.toLowerCase().includes(q));
-  }, [options, inputVal]);
-
-  return (
-    <div className="relative" ref={wrapperRef}>
-      <label className="mb-1 block text-xs font-semibold text-slate-700">
-        {label}
-      </label>
-
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputVal}
-          onChange={(e) => {
-            const val = e.target.value;
-            setInputVal(val);
-            setOpen(true);
-            if (!val.trim()) {
-              onSelect(undefined);
-            }
-          }}
-          onFocus={() => {
-            if (!disabled) setOpen(true);
-          }}
-          placeholder={placeholder}
-          disabled={disabled}
-          className={cn(
-            "flex h-10 w-full items-center rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20",
-            disabled && "cursor-not-allowed bg-slate-100 text-slate-400"
-          )}
-        />
-        {inputVal && !disabled ? (
-          <button
-            type="button"
-            onClick={() => {
-              setInputVal("");
-              onSelect(undefined);
-              inputRef.current?.focus();
-              setOpen(false);
-            }}
-            className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-200 text-[10px] text-slate-700 hover:bg-slate-300"
-          >
-            ×
-          </button>
-        ) : null}
-      </div>
-
-      {open && !disabled ? (
-        <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-          <div className="max-h-48 overflow-y-auto py-1">
-            {filteredOptions.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-slate-400">
-                No results found
-              </p>
-            ) : (
-              filteredOptions.map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => {
-                    setInputVal(opt);
-                    onSelect(opt);
-                    setOpen(false);
-                    inputRef.current?.blur();
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100",
-                    opt === value && "bg-slate-100 font-medium"
-                  )}
-                >
-                  {opt}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-
 const LandingPage = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const { isOpen, open, close } = useModal(false);
 
-  const { filters, filteredData, setFilter, resetFilters } =
-    useFilters(businessLeads);
+  // masih pakai filters bawaanmu utk businessType & rating
+  const { filters, setFilter, resetFilters } = useFilters(businessLeads);
+
+  // ⬇️ country & city sekarang jadi state biasa
+  const [country, setCountry] = useState("");
+  const [city, setCity] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -156,53 +33,26 @@ const LandingPage = () => {
   const [scraping, setScraping] = useState(false);
   const [scrapeError, setScrapeError] = useState<string | null>(null);
 
-  // negara unik dari mock
-  const countryOptions = useMemo(() => {
-    const set = new Set<string>();
-    businessLeads.forEach((item) => {
-      if (item.country) set.add(item.country);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, []);
-
-  // kota tergantung negara
-  const cityOptions = useMemo(() => {
-    if (!filters.country) {
-      const set = new Set<string>();
-      businessLeads.forEach((item) => {
-        if (item.city) set.add(item.city);
-      });
-      return Array.from(set).sort((a, b) => a.localeCompare(b));
-    }
-
-    const set = new Set<string>();
-    businessLeads.forEach((item) => {
-      if (item.country === filters.country && item.city) {
-        set.add(item.city);
-      }
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [filters.country]);
-
   useEffect(() => {
     setCurrentPage(1);
   }, [pageSize]);
 
-  // ⬇️ ini kita sesuaikan supaya pasti nembak ke route Next.js sendiri
   const handleScrape = async () => {
     setScrapeError(null);
 
-    // payload yang dikirim ke backend scraper
     const payload = {
-      type_business: filters.businessType || "",
-      city: filters.city || "",
-      country: filters.country || "",
+      type_business: (filters.businessType || "").trim(),
+      city: city.trim(),
+      country: country.trim(),
       min_rating: filters.rating ? Number(filters.rating) : 0,
+      max_pages: 1,
     };
+
+    // debug biar kelihatan sekarang keisi
+    console.log("[CLIENT] scrape payload →", payload);
 
     setScraping(true);
     try {
-      // 1) trigger scrap ke API Next.js (bukan langsung ke port backend)
       const scrapRes = await fetch("/api/scrape", {
         method: "POST",
         headers: {
@@ -211,56 +61,56 @@ const LandingPage = () => {
         body: JSON.stringify(payload),
       });
 
+      const rawText = await scrapRes.text();
+      console.log("[CLIENT] scrape status →", scrapRes.status);
+      console.log("[CLIENT] scrape raw →", rawText);
+
+      let scrapJson: any = {};
+      try {
+        scrapJson = JSON.parse(rawText);
+      } catch {
+        scrapJson = { raw: rawText };
+      }
+
       if (!scrapRes.ok) {
-        const tx = await scrapRes.text();
-        throw new Error(tx || `Scrap failed (${scrapRes.status})`);
+        throw new Error(
+          scrapJson.message ||
+            scrapJson.error ||
+            `Scrape failed (${scrapRes.status})`
+        );
       }
 
-      // 2) ambil data hasil scrap dari API Next.js juga
-      const compRes = await fetch("/api/companies", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const rows: any[] = Array.isArray(scrapJson)
+        ? scrapJson
+        : scrapJson.data
+        ? scrapJson.data
+        : scrapJson.items
+        ? scrapJson.items
+        : [];
 
-      if (!compRes.ok) {
-        const tx = await compRes.text();
-        throw new Error(tx || `Fetch companies failed (${compRes.status})`);
-      }
-
-      const compJson = await compRes.json();
-      const rows = Array.isArray(compJson) ? compJson : compJson.data || [];
-
-      // 3) normalisasi ke bentuk BusinessLead (typo2 backend ditutup di sini)
       const normalized = rows.map((item: any, idx: number) => ({
-        id: item.id ?? `db-${idx + 1}`,
-        // backend bisa kirim company/name → kita isi dua-duanya
+        id: item.id ?? `scraped-${idx + 1}`,
         name: item.name ?? item.company ?? "",
         company: item.company ?? item.name ?? "",
-        title: item.contact_title ?? item.title ?? "",
         email: item.email ?? "",
         phone: item.phone ?? item.phone_number ?? "",
-        // kamu punya industry + businessType → kita isi dua2nya
-        industry: item.industry ?? item.type_business ?? payload.type_business,
-        businessType: item.type_business ?? payload.type_business ?? "",
-        // lokasi
         country: item.country ?? payload.country ?? "",
         city: item.city ?? payload.city ?? "",
-        // rating
         rating:
           typeof item.rating === "number"
             ? item.rating
-            : payload.min_rating || 0,
-        // link
+            : typeof item.min_rating === "number"
+            ? item.min_rating
+            : payload.min_rating,
+        businessType: item.type_business ?? payload.type_business ?? "",
         website: item.website ?? "",
-        linkedin: item.linkedin ?? "",
       }));
 
       setBackendData(normalized);
       setCurrentPage(1);
     } catch (err: any) {
-      setScrapeError(err.message || "Scraping / fetch companies gagal");
+      console.error("[CLIENT] scrape error →", err);
+      setScrapeError(err.message || "Scraping gagal");
       setBackendData([]);
     } finally {
       setScraping(false);
@@ -329,21 +179,21 @@ const LandingPage = () => {
             <div className="grid gap-4 md:grid-cols-3">
               {[
                 {
-                    title: "1. Set Your Filters",
-                    desc: "Use the expandable filter sections below to define your desired criteria such as job titles, seniority levels, industry types, and geographic regions.",
+                  title: "1. Set Your Filters",
+                  desc: "Use the filter inputs below to define your desired criteria.",
                 },
                 {
-                    title: "2. Search Database",
-                    desc: "Click 'Search Database' to apply your selected filters and access relevant leads from our extensive database.",
+                  title: "2. Search Database",
+                  desc: "Click 'Search Database' to fetch relevant business leads.",
                 },
                 {
-                    title: "3. Review Results",
-                    desc: "Review the detailed lead information in the results table below, including contact availability status and company details.",
+                  title: "3. Review Results",
+                  desc: "Review the results in the table below.",
                 },
               ].map((item) => (
                 <div
-                  key={item.title}
-                  className="rounded-lg border border-slate-100 bg-[#F6F7FB] p-4"
+                    key={item.title}
+                    className="rounded-lg border border-slate-100 bg-[#F6F7FB] p-4"
                 >
                   <h3 className="text-sm font-semibold text-slate-900">
                     {item.title}
@@ -436,7 +286,7 @@ const LandingPage = () => {
                       type="text"
                       value={filters.businessType || ""}
                       onChange={(e) => setFilter("businessType", e.target.value)}
-                      placeholder="e.g., Agency, Retail, Software"
+                      placeholder="e.g., cafe, agency, retail"
                       className="h-10 w-full rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20"
                     />
                   </div>
@@ -449,36 +299,38 @@ const LandingPage = () => {
                       type="text"
                       value={filters.rating || ""}
                       onChange={(e) => setFilter("rating", e.target.value)}
-                      placeholder="e.g., 4.5"
+                      placeholder="e.g., 4"
                       className="h-10 w-full rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <SearchableSelect
-                    label="Country"
-                    value={filters.country || ""}
-                    onSelect={(val) => {
-                      setFilter("country", val || "");
-                      setFilter("city", "");
-                    }}
-                    options={countryOptions}
-                    placeholder="Select country…"
-                  />
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      Country
+                    </label>
+                    <input
+                      type="text"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      placeholder="Country"
+                      className="h-10 w-full rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20"
+                    />
+                  </div>
 
-                  <SearchableSelect
-                    label="City"
-                    value={filters.city || ""}
-                    onSelect={(val) => {
-                      setFilter("city", val || "");
-                    }}
-                    options={cityOptions}
-                    placeholder={
-                      filters.country ? "Select city…" : "Select country first…"
-                    }
-                    disabled={false}
-                  />
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="City"
+                      className="h-10 w-full rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -488,6 +340,8 @@ const LandingPage = () => {
                     resetFilters();
                     setBackendData([]);
                     setCurrentPage(1);
+                    setCountry("");
+                    setCity("");
                   }}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#3366FF] bg-white px-6 text-sm font-semibold text-[#1F3F7F] transition hover:bg-[#f3f5ff] lg:w-[230px]"
                 >

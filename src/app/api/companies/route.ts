@@ -1,89 +1,64 @@
 // src/app/api/companies/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_API_URL =
+const BACKEND_BASE =
   process.env.BACKEND_API_URL?.replace(/\/$/, "") ||
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:8080";
+  "http://localhost:8080"; // sesuaikan dengan backend kamu
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const perPage = searchParams.get("per_page") || "200";
+  // ambil seluruh query dari request asli
+  const url = new URL(req.url);
+  const qs = url.searchParams.toString(); // contoh: "per_page=200&page=1"
 
-  const incomingAuth = req.headers.get("authorization");
+  // coba ambil token dari beberapa nama cookie
   const cookieToken =
-    req.cookies.get("access_token")?.value ||
     req.cookies.get("token")?.value ||
+    req.cookies.get("access_token")?.value ||
+    req.cookies.get("jwt")?.value ||
     null;
 
-  // 🔴 DEBUG: lihat apa yang kita punya
-  console.log("[COMPANIES] incoming Authorization →", incomingAuth);
-  console.log("[COMPANIES] cookie access_token →", cookieToken);
+  // kalau user kirim Authorization di fetch dari browser, kita ikutkan
+  const headerAuth = req.headers.get("authorization");
 
-  if (!incomingAuth && !cookieToken) {
-    return NextResponse.json(
-      {
-          ok: false,
-          code: 401,
-          message: "Sesi login sudah tidak berlaku. Silakan login ulang.",
-        },
-    );
-  }
+  // rakit URL backend lengkap + query
+  const backendUrl = `${BACKEND_BASE}/companies${qs ? `?${qs}` : ""}`;
+  // console.log("[API] forward ke backend:", backendUrl);
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    Accept: "application/json",
   };
 
-  // pakai urutan: header dulu, baru cookie
-  if (incomingAuth) {
-    headers["Authorization"] = incomingAuth;
+  // pilih sumber auth
+  if (headerAuth) {
+    headers["Authorization"] = headerAuth;
   } else if (cookieToken) {
-    // kebanyakan backend pakai Bearer
     headers["Authorization"] = `Bearer ${cookieToken}`;
   }
 
-  const backendUrl = `${BACKEND_API_URL}/companies?per_page=${encodeURIComponent(
-    perPage
-  )}`;
-
-  const backendRes = await fetch(backendUrl, {
-    method: "GET",
-    headers,
-  });
-
-  const rawText = await backendRes.text();
-
-  // 🔴 DEBUG: lihat respon backend
-  console.log("[COMPANIES] backend status →", backendRes.status);
-  console.log("[COMPANIES] backend raw →", rawText);
-
-  let data: any;
   try {
-    data = JSON.parse(rawText);
-  } catch {
-    data = { raw: rawText };
+    const res = await fetch(backendUrl, {
+      method: "GET",
+      headers,
+      cache: "no-store",
+    });
+
+    const data = await res.json().catch(() => null);
+
+    // forward status & body persis
+    return NextResponse.json(data, {
+      status: res.status,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (err: any) {
+    console.error("[API /companies] error:", err);
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Gagal mengambil data companies dari backend.",
+      },
+      { status: 500 },
+    );
   }
-
-  if (!backendRes.ok) {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: backendRes.status,
-          message:
-            data?.message ||
-            data?.error ||
-            "Tidak bisa mengambil daftar perusahaan.",
-          detail: data,
-        },
-        { status: backendRes.status }
-      );
-    }
-
-  return NextResponse.json(data, {
-    status: backendRes.status,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-    },
-  });
 }

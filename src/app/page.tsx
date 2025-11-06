@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Topbar } from "@/_components/Topbar";
 import { buttonStyles } from "@/_components/ui/Button";
@@ -18,7 +18,6 @@ const LandingPage = () => {
 
   const { filters, setFilter, resetFilters } = useFilters(businessLeads);
 
-  // country & city jadi state biasa
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
 
@@ -29,19 +28,32 @@ const LandingPage = () => {
   const handleScrape = async () => {
     setScrapeError(null);
 
+    const businessType = (filters.businessType || "").trim();
+    const finalCountry = country.trim();
+    const finalCity = city.trim();
+
+    // validasi client
+    if (!businessType) {
+      setScrapeError("Type business harus diisi dulu.");
+      return;
+    }
+    if (!finalCountry || !finalCity) {
+      setScrapeError("Country dan city harus diisi dulu.");
+      return;
+    }
+
     const payload = {
-      type_business: (filters.businessType || "").trim(),
-      city: city.trim(),
-      country: country.trim(),
+      type_business: businessType,
+      city: finalCity,
+      country: finalCountry,
       min_rating: filters.rating ? Number(filters.rating) : 0,
-      max_pages: 1,
     };
 
     console.log("[CLIENT] scrape payload →", payload);
 
     setScraping(true);
     try {
-      // 1) jalankan scrap
+      // 1) jalankan scrape
       const scrapRes = await fetch("/api/scrape", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -55,24 +67,23 @@ const LandingPage = () => {
       if (!scrapRes.ok || scrapJson?.ok === false) {
         const code = scrapJson?.code ?? scrapRes.status;
         let userMsg =
-          scrapJson?.message || "Gagal menjalankan scraping. Coba lagi.";
+          scrapJson?.message ||
+          scrapJson?.detail?.message ||
+          "Gagal menjalankan scraping. Coba lagi.";
 
         if (code === 401) {
           userMsg =
             "Sesi kamu sudah habis atau token tidak valid. Silakan login lagi.";
-        } else if (code === 400) {
-          userMsg =
-            "Data yang kamu kirim belum lengkap. Pastikan city dan country diisi.";
-        } else if (code >= 500) {
-          userMsg =
-            "Layanan scraping sedang bermasalah. Coba lagi beberapa saat.";
         }
 
         throw new Error(userMsg);
       }
 
-      // 2) ambil data companies
-      const companiesRes = await fetch("/api/companies?per_page=200", {
+      // 2) habis scrape → ambil semua companies per_page=200 (tanpa filter tambahan)
+      const companiesUrl = "/api/companies?per_page=200";
+      console.log("[CLIENT] akan fetch companies ke →", companiesUrl);
+
+      const companiesRes = await fetch(companiesUrl, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -95,11 +106,13 @@ const LandingPage = () => {
       // 3) normalisasi
       const rows: any[] = Array.isArray(companiesJson)
         ? companiesJson
-        : companiesJson.data
+        : Array.isArray(companiesJson.data)
         ? companiesJson.data
-        : companiesJson.items
+        : Array.isArray(companiesJson.items)
         ? companiesJson.items
         : [];
+
+      console.log("[CLIENT] jumlah companies →", rows.length);
 
       const normalized = rows.map((item: any, idx: number) => {
         const ratingNum =
@@ -159,7 +172,6 @@ const LandingPage = () => {
     }
   };
 
-  // data yang akan ditampilkan tabel
   const sourceData = backendData.length > 0 ? backendData : [];
 
   useEffect(() => {
@@ -376,6 +388,7 @@ const LandingPage = () => {
                     setBackendData([]);
                     setCountry("");
                     setCity("");
+                    setScrapeError(null);
                   }}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#3366FF] bg-white px-6 text-sm font-semibold text-[#1F3F7F] transition hover:bg-[#f3f5ff] lg:w-[230px]"
                 >

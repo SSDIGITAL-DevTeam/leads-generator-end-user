@@ -22,8 +22,11 @@ export async function GET(req: NextRequest) {
 
   if (!incomingAuth && !cookieToken) {
     return NextResponse.json(
-      { message: "Unauthorized: token missing" },
-      { status: 401 }
+      {
+          ok: false,
+          code: 401,
+          message: "Sesi login sudah tidak berlaku. Silakan login ulang.",
+        },
     );
   }
 
@@ -60,6 +63,21 @@ export async function GET(req: NextRequest) {
   } catch {
     data = { raw: rawText };
   }
+
+  if (!backendRes.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: backendRes.status,
+          message:
+            data?.message ||
+            data?.error ||
+            "Tidak bisa mengambil daftar perusahaan.",
+          detail: data,
+        },
+        { status: backendRes.status }
+      );
+    }
 
   return NextResponse.json(data, {
     status: backendRes.status,

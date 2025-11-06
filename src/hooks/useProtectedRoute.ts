@@ -2,12 +2,13 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-
 import { useAuth } from "@/features/auth/useAuth";
 
 interface UseProtectedRouteOptions {
+  // kalau true, user harus login
   requireAuth?: boolean;
-  redirectTo?: string;
+  // harus berupa path ("/..."), biar cocok sama typed route Next
+  redirectTo?: `/${string}`;
 }
 
 export const useProtectedRoute = (
@@ -20,17 +21,24 @@ export const useProtectedRoute = (
   useEffect(() => {
     if (isLoading) return;
 
+    // kalau butuh auth tapi belum login
     if (requireAuth && !isAuthenticated) {
-      router.replace(redirectTo ?? "/login");
+      // default ke /login
+      const target = (redirectTo ?? "/login") as `/${string}`;
+      router.replace(target as any);
+      return;
     }
 
+    // kalau TIDAK butuh auth (misal di /login) tapi user SUDAH login
     if (!requireAuth && isAuthenticated) {
-      router.replace(redirectTo ?? "/dashboard");
+      // default ke /dashboard
+      const target = (redirectTo ?? "/dashboard") as `/${string}`;
+      router.replace(target as any);
     }
   }, [requireAuth, isAuthenticated, redirectTo, router, isLoading]);
 
   return {
     isAuthenticated,
-    isLoading
+    isLoading,
   };
 };

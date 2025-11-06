@@ -23,8 +23,11 @@ export async function POST(req: NextRequest) {
 
   if (!incomingAuth && !cookieToken) {
     return NextResponse.json(
-      { error: "unauthorized: token missing" },
-      { status: 401 }
+      {
+          ok: false,
+          code: 401,
+          message: "Sesi login sudah tidak berlaku. Silakan login ulang.",
+        },
     );
   }
 
@@ -56,6 +59,24 @@ export async function POST(req: NextRequest) {
   } catch {
     data = { raw: rawText };
   }
+
+  if (!backendRes.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: backendRes.status,
+          // coba pakai pesan dari backend, kalau gak ada pakai default
+          message:
+            data?.message ||
+            data?.error ||
+            (backendRes.status === 500
+              ? "Server scrape sedang bermasalah. Coba lagi beberapa saat."
+              : "Gagal menjalankan scraping."),
+          detail: data,
+        },
+        { status: backendRes.status }
+      );
+    }
 
   return NextResponse.json(data, {
     status: backendRes.status,

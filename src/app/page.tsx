@@ -38,162 +38,140 @@ const LandingPage = () => {
   }, [pageSize]);
 
   const handleScrape = async () => {
-  setScrapeError(null);
+    setScrapeError(null);
 
-  const payload = {
-    type_business: (filters.businessType || "").trim(),
-    city: city.trim(),
-    country: country.trim(),
-    min_rating: filters.rating ? Number(filters.rating) : 0,
-    max_pages: 1,
-  };
+    const payload = {
+      type_business: (filters.businessType || "").trim(),
+      city: city.trim(),
+      country: country.trim(),
+      min_rating: filters.rating ? Number(filters.rating) : 0,
+      max_pages: 1,
+    };
 
-  console.log("[CLIENT] scrape payload →", payload);
+    console.log("[CLIENT] scrape payload →", payload);
 
-  setScraping(true);
-  try {
-    // 1) trigger scraping di backend
-    const scrapRes = await fetch("/api/scrape", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const scrapText = await scrapRes.text();
-    console.log("[CLIENT] scrape status →", scrapRes.status);
-    console.log("[CLIENT] scrape raw →", scrapText);
-
-    // walau scrape baliknya cuma message, kita lanjut ke langkah 2
-    if (!scrapRes.ok) {
-      let scrapJson: any = {};
-      try {
-        scrapJson = JSON.parse(scrapText);
-      } catch {
-        scrapJson = { raw: scrapText };
-      }
-      throw new Error(
-        scrapJson.message ||
-          scrapJson.error ||
-          `Scrape failed (${scrapRes.status})`
-      );
-    }
-
-    // 2) setelah scrape berhasil, ambil semua companies
-    const companiesRes = await fetch("/api/companies?per_page=200", {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    const companiesText = await companiesRes.text();
-    console.log("[CLIENT] companies status →", companiesRes.status);
-    console.log("[CLIENT] companies raw →", companiesText);
-
-    if (!companiesRes.ok) {
-      let errJson: any = {};
-      try {
-        errJson = JSON.parse(companiesText);
-      } catch {
-        errJson = { raw: companiesText };
-      }
-      throw new Error(
-        errJson.message ||
-          errJson.error ||
-          `Fetch companies failed (${companiesRes.status})`
-      );
-    }
-
-    let companiesJson: any = {};
+    setScraping(true);
     try {
-      companiesJson = JSON.parse(companiesText);
-    } catch {
-      companiesJson = { data: [] };
+      // 1) jalankan scrap
+      const scrapRes = await fetch("/api/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const scrapJson = await scrapRes.json().catch(() => ({}));
+      console.log("[CLIENT] scrape status →", scrapRes.status);
+      console.log("[CLIENT] scrape json →", scrapJson);
+
+      if (!scrapRes.ok || scrapJson?.ok === false) {
+        // terjemahan error untuk user
+        const code = scrapJson?.code ?? scrapRes.status;
+        let userMsg =
+          scrapJson?.message || "Gagal menjalankan scraping. Coba lagi.";
+
+        if (code === 401) {
+          userMsg =
+            "Sesi kamu sudah habis atau token tidak valid. Silakan login lagi.";
+        } else if (code === 400) {
+          // backend kamu sebelumnya protes soal city/country
+          userMsg =
+            "Data yang kamu kirim belum lengkap. Pastikan city dan country diisi.";
+        } else if (code >= 500) {
+          userMsg =
+            "Layanan scraping sedang bermasalah. Coba lagi beberapa saat.";
+        }
+
+        throw new Error(userMsg);
+      }
+
+      // 2) ambil data companies
+      const companiesRes = await fetch("/api/companies?per_page=200", {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      const companiesJson = await companiesRes.json().catch(() => ({}));
+      console.log("[CLIENT] companies status →", companiesRes.status);
+      console.log("[CLIENT] companies json →", companiesJson);
+
+      if (!companiesRes.ok || companiesJson?.ok === false) {
+        const code = companiesJson?.code ?? companiesRes.status;
+        let userMsg =
+          companiesJson?.message || "Gagal mengambil data hasil scraping.";
+
+        if (code === 401) {
+          userMsg = "Sesi kamu sudah habis. Silakan login lagi.";
+        }
+
+        throw new Error(userMsg);
+      }
+
+      // 3) normalisasi
+      const rows: any[] = Array.isArray(companiesJson)
+        ? companiesJson
+        : companiesJson.data
+        ? companiesJson.data
+        : companiesJson.items
+        ? companiesJson.items
+        : [];
+
+      const normalized = rows.map((item: any, idx: number) => {
+        const ratingNum =
+          typeof item.rating === "number"
+            ? item.rating
+            : item.rating
+            ? Number(item.rating)
+            : payload.min_rating;
+
+        const reviewsVal =
+          typeof item.reviews === "number"
+            ? item.reviews
+            : typeof item.user_ratings_total === "number"
+            ? item.user_ratings_total
+            : typeof item.views === "number"
+            ? item.views
+            : null;
+
+        return {
+          id: item.id ?? `company-${idx + 1}`,
+          name: item.name ?? item.company ?? "",
+          company: item.company ?? item.name ?? "",
+          phone: item.phone ?? item.formatted_phone_number ?? "",
+          email: item.email ?? "",
+          website: item.website ?? item.url ?? "",
+          rating: ratingNum,
+          reviews: reviewsVal,
+          type_business:
+            item.type_business ??
+            item.business_type ??
+            payload.type_business ??
+            "",
+          businessType:
+            item.type_business ??
+            item.business_type ??
+            payload.type_business ??
+            "",
+          address:
+            item.address ?? item.formatted_address ?? item.place_address ?? "",
+          country: item.country ?? payload.country ?? "",
+          city: item.city ?? payload.city ?? "",
+          location:
+            item.city && item.country
+              ? `${item.city}, ${item.country}`
+              : item.city ?? item.country ?? "",
+          raw: item,
+        };
+      });
+
+      setBackendData(normalized);
+      setCurrentPage(1);
+    } catch (err: any) {
+      console.error("[CLIENT] scrape/companies error →", err);
+      setScrapeError(err.message || "Terjadi kesalahan.");
+      setBackendData([]);
+    } finally {
+      setScraping(false);
     }
-
-    // 3) normalisasi bentuk data backend
-    // seringnya backend balikin { data: [...] } atau langsung array
-    const rows: any[] = Array.isArray(companiesJson)
-      ? companiesJson
-      : companiesJson.data
-      ? companiesJson.data
-      : companiesJson.items
-      ? companiesJson.items
-      : [];
-
-    const normalized = rows.map((item: any, idx: number) => {
-  // rating bisa string "5.0" atau number
-  const ratingNum =
-    typeof item.rating === "number"
-      ? item.rating
-      : item.rating
-      ? Number(item.rating)
-      : payload.min_rating;
-
-  // ⬇️ ini penting: tarik semua kemungkinan sumber reviews
-  const reviewsVal =
-    typeof item.reviews === "number"
-      ? item.reviews
-      : typeof item.user_ratings_total === "number"
-      ? item.user_ratings_total
-      : typeof item.views === "number"
-      ? item.views
-      : null;
-
-  return {
-    id: item.id ?? `company-${idx + 1}`,
-    // nama/perusahaan
-    name: item.name ?? item.company ?? "",
-    company: item.company ?? item.name ?? "",
-    // kontak
-    phone: item.phone ?? item.formatted_phone_number ?? "",
-    email: item.email ?? "",
-    // website/link
-    website: item.website ?? item.url ?? "",
-    // angka
-    rating: ratingNum,
-    reviews: reviewsVal,          // ⬅️ sekarang dikirim ke tabel
-    // bisnis
-    type_business:
-      item.type_business ??
-      item.business_type ??
-      payload.type_business ??
-      "",
-    businessType:
-      item.type_business ??
-      item.business_type ??
-      payload.type_business ??
-      "",
-    // alamat & lokasi
-    address:
-      item.address ??
-      item.formatted_address ??
-      item.place_address ??
-      "",
-    country: item.country ?? payload.country ?? "",
-    city: item.city ?? payload.city ?? "",
-    location:
-      item.city && item.country
-        ? `${item.city}, ${item.country}`
-        : item.city ?? item.country ?? "",
-    // simpan aslinya kalau perlu
-    raw: item,
   };
-});
-
-
-    setBackendData(normalized);
-    setCurrentPage(1);
-  } catch (err: any) {
-    console.error("[CLIENT] scrape/companies error →", err);
-    setScrapeError(err.message || "Scraping / fetch companies gagal");
-    setBackendData([]);
-  } finally {
-    setScraping(false);
-  }
-};
 
   const sourceData = backendData.length > 0 ? backendData : [];
 
@@ -270,8 +248,8 @@ const LandingPage = () => {
                 },
               ].map((item) => (
                 <div
-                    key={item.title}
-                    className="rounded-lg border border-slate-100 bg-[#F6F7FB] p-4"
+                  key={item.title}
+                  className="rounded-lg border border-slate-100 bg-[#F6F7FB] p-4"
                 >
                   <h3 className="text-sm font-semibold text-slate-900">
                     {item.title}
@@ -363,7 +341,9 @@ const LandingPage = () => {
                     <input
                       type="text"
                       value={filters.businessType || ""}
-                      onChange={(e) => setFilter("businessType", e.target.value)}
+                      onChange={(e) =>
+                        setFilter("businessType", e.target.value)
+                      }
                       placeholder="e.g., cafe, agency, retail"
                       className="h-10 w-full rounded-full border border-[#C7D5FF] bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-[#3366FF] focus:ring-2 focus:ring-[#3366FF]/20"
                     />

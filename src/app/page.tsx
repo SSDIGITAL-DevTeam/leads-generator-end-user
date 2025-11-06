@@ -11,31 +11,20 @@ import { cn } from "@/lib/utils";
 import { businessLeads } from "@/lib/mockData";
 import { useFilters } from "@/features/search/useFilters";
 import { ResultTable } from "@/features/search/ResultTable";
-import { Pagination } from "@/_components/ui/Pagination";
-
-const DEFAULT_PAGE_SIZE = 10;
 
 const LandingPage = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const { isOpen, open, close } = useModal(false);
 
-  // masih pakai filters bawaanmu utk businessType & rating
   const { filters, setFilter, resetFilters } = useFilters(businessLeads);
 
-  // ⬇️ country & city sekarang jadi state biasa
+  // country & city jadi state biasa
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const [backendData, setBackendData] = useState<any[]>([]);
   const [scraping, setScraping] = useState(false);
   const [scrapeError, setScrapeError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [pageSize]);
 
   const handleScrape = async () => {
     setScrapeError(null);
@@ -64,7 +53,6 @@ const LandingPage = () => {
       console.log("[CLIENT] scrape json →", scrapJson);
 
       if (!scrapRes.ok || scrapJson?.ok === false) {
-        // terjemahan error untuk user
         const code = scrapJson?.code ?? scrapRes.status;
         let userMsg =
           scrapJson?.message || "Gagal menjalankan scraping. Coba lagi.";
@@ -73,7 +61,6 @@ const LandingPage = () => {
           userMsg =
             "Sesi kamu sudah habis atau token tidak valid. Silakan login lagi.";
         } else if (code === 400) {
-          // backend kamu sebelumnya protes soal city/country
           userMsg =
             "Data yang kamu kirim belum lengkap. Pastikan city dan country diisi.";
         } else if (code >= 500) {
@@ -163,7 +150,6 @@ const LandingPage = () => {
       });
 
       setBackendData(normalized);
-      setCurrentPage(1);
     } catch (err: any) {
       console.error("[CLIENT] scrape/companies error →", err);
       setScrapeError(err.message || "Terjadi kesalahan.");
@@ -173,13 +159,8 @@ const LandingPage = () => {
     }
   };
 
+  // data yang akan ditampilkan tabel
   const sourceData = backendData.length > 0 ? backendData : [];
-
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    return sourceData.slice(start, end);
-  }, [sourceData, currentPage, pageSize]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -308,11 +289,7 @@ const LandingPage = () => {
                     stroke="currentColor"
                     strokeWidth={1.6}
                   >
-                    <path
-                      d="M4 4v5h.582M20 20v-5h-.581"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                    <path d="M4 4v5h.582M20 20v-5h-.581" strokeLinecap="round" />
                     <path
                       d="M5.843 15A6.002 6.002 0 0 0 18 13.197"
                       strokeLinecap="round"
@@ -397,7 +374,6 @@ const LandingPage = () => {
                   onClick={() => {
                     resetFilters();
                     setBackendData([]);
-                    setCurrentPage(1);
                     setCountry("");
                     setCity("");
                   }}
@@ -433,19 +409,11 @@ const LandingPage = () => {
           <section className="rounded-xl bg-white shadow-sm">
             <div className="w-full overflow-x-auto">
               <ResultTable
-                data={paginatedData}
+                data={sourceData}
                 total={sourceData.length}
                 fullData={sourceData}
               />
             </div>
-
-            <Pagination
-              totalItems={sourceData.length}
-              currentPage={currentPage}
-              onPageChange={setCurrentPage}
-              pageSize={pageSize}
-              onPageSizeChange={setPageSize}
-            />
           </section>
         </div>
       </main>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { DataTable } from "@/_components/DataTable";
 import { Button } from "@/_components/ui/Button";
@@ -8,6 +8,8 @@ import { Badge } from "@/_components/ui/Badge";
 import { formatLocation } from "@/lib/helpers";
 import type { BusinessLead } from "@/types/business";
 import Image from "next/image";
+// pakai pagination yang sama dengan yang kamu pakai di page.tsx
+import { Pagination } from "@/_components/ui/Pagination";
 
 interface ResultTableProps {
   data: BusinessLead[];
@@ -15,9 +17,19 @@ interface ResultTableProps {
   fullData?: BusinessLead[];
 }
 
+const DEFAULT_PAGE_SIZE = 10;
+
 export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
+  // kalau user ganti kata kunci, balik ke page 1
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  // 1) filter lokal
   const filtered = useMemo(() => {
     if (!search.trim()) return data;
     const q = search.trim().toLowerCase();
@@ -54,6 +66,14 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
     });
   }, [data, search]);
 
+  // 2) pagination SETELAH filter
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return filtered.slice(start, end);
+  }, [filtered, currentPage, pageSize]);
+
+  // 3) columns sama seperti sebelumnya, aku cuma pastiin reviews pakai metode yang kemarin
   const columns = useMemo(
     () => [
       {
@@ -117,33 +137,30 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         },
       },
       {
-  key: "reviews",
-  header: "Reviews",
-  render: (lead: BusinessLead) => {
-    // kumpulkan semua kemungkinan sumber angka reviews
-    const raw =
-      (lead as any).reviews ??
-      (lead as any).review_count ??
-      (lead as any).views ??
-      (lead as any).raw?.reviews ??
-      (lead as any).raw?.review_count ??
-      (lead as any).raw?.views ??
-      null;
+        key: "reviews",
+        header: "Reviews",
+        render: (lead: BusinessLead) => {
+          const raw =
+            (lead as any).reviews ??
+            (lead as any).review_count ??
+            (lead as any).views ??
+            (lead as any).raw?.reviews ??
+            (lead as any).raw?.views ??
+            null;
 
-    // pola yang sama seperti rating:
-    if (typeof raw === "number") {
-      // kalau mau pakai pemisah seribu:
-      // return <span className="text-sm text-slate-700">{raw.toLocaleString()}</span>;
-      return <span className="text-sm text-slate-700">{raw}</span>;
-    }
-
-    if (typeof raw === "string" && raw.trim() !== "") {
-      return <span className="text-sm text-slate-700">{raw}</span>;
-    }
-
-    return <span className="text-sm text-slate-400">-</span>;
-  },
-},
+          if (typeof raw === "number") {
+            return (
+              <span className="text-sm text-slate-700">
+                {raw.toLocaleString("id-ID")}
+              </span>
+            );
+          }
+          if (typeof raw === "string" && raw.trim() !== "") {
+            return <span className="text-sm text-slate-700">{raw}</span>;
+          }
+          return <span className="text-sm text-slate-400">-</span>;
+        },
+      },
       {
         key: "type_business",
         header: "Type Bussiness",
@@ -222,6 +239,7 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
             />
           </div>
 
+          {/* download tetap sama */}
           <Button
             type="button"
             className="rounded-md !bg-[#2451CC] px-4 py-4 text-sm font-semibold text-white shadow-sm transition"
@@ -263,9 +281,6 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
                     (lead as any).reviews ??
                     (lead as any).review_count ??
                     (lead as any).views ??
-                    (lead as any).raw?.reviews ??
-                    (lead as any).raw?.review_count ??
-                    (lead as any).raw?.views ??
                     "";
                   const typeBVal =
                     (lead as any).type_business ||
@@ -324,11 +339,23 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         </div>
       </div>
 
+      {/* tabel → sekarang hanya data halaman ini */}
       <DataTable
-        data={filtered}
+        data={paginatedData}
         columns={columns}
         emptyState={showEmptyOnlyHeader ? null : undefined}
       />
+
+      {/* pagination di bawah tabel, pakai jumlah SESUDAH filter */}
+      <div className="px-4 pb-5 md:px-6">
+        <Pagination
+          totalItems={filtered.length}
+          currentPage={currentPage}
+          onPageChange={setCurrentPage}
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+        />
+      </div>
     </section>
   );
 };

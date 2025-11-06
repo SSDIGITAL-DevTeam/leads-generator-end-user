@@ -17,14 +17,13 @@ export async function POST(req: NextRequest) {
     req.cookies.get("token")?.value ||
     null;
 
-  // 🔴 DEBUG SERVER: lihat apa yang dikirim client
-  console.log("[SERVER] /api/scrape payload →", payload);
-  console.log("[SERVER] has auth? →", Boolean(incomingAuth || cookieToken));
+  console.log("[SCRAPE] incomingAuth →", incomingAuth);
+  console.log("[SCRAPE] cookieToken →", cookieToken);
+  console.log("[SCRAPE] payload →", payload);
 
   if (!incomingAuth && !cookieToken) {
-    console.log("[SERVER] missing token → 401");
     return NextResponse.json(
-      { message: "Unauthorized: token missing" },
+      { error: "unauthorized: token missing" },
       { status: 401 }
     );
   }
@@ -32,23 +31,24 @@ export async function POST(req: NextRequest) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
+
   if (incomingAuth) {
     headers["Authorization"] = incomingAuth;
   } else if (cookieToken) {
+    // kalau backend kamu pakai "Token " ganti baris di bawah ini:
     headers["Authorization"] = `Bearer ${cookieToken}`;
+    // headers["Authorization"] = `Token ${cookieToken}`;
   }
 
-  const resp = await fetch(`${BACKEND_API_URL}${SCRAPE_PATH}`, {
+  const backendRes = await fetch(`${BACKEND_API_URL}${SCRAPE_PATH}`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
   });
 
-  const rawText = await resp.text();
-
-  // 🔴 DEBUG SERVER: lihat balasan backend asli
-  console.log("[SERVER] backend status →", resp.status);
-  console.log("[SERVER] backend raw →", rawText);
+  const rawText = await backendRes.text();
+  console.log("[SCRAPE] backend status →", backendRes.status);
+  console.log("[SCRAPE] backend raw →", rawText);
 
   let data: any;
   try {
@@ -57,10 +57,11 @@ export async function POST(req: NextRequest) {
     data = { raw: rawText };
   }
 
-  return new NextResponse(JSON.stringify(data), {
-    status: resp.status,
+  return NextResponse.json(data, {
+    status: backendRes.status,
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     },
   });
 }

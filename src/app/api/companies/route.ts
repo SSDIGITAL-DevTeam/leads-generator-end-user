@@ -1,29 +1,71 @@
 // src/app/api/companies/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_BASE =
-  process.env.SCRAPER_API_URL?.replace(/\/$/, "") ||
+const BACKEND_API_URL =
+  process.env.BACKEND_API_URL?.replace(/\/$/, "") ||
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:8888/api";
+  "http://localhost:8080";
 
-// ganti ke endpoint backend-mu yang ngelist hasil scraping
-const COMPANIES_PATH = "/companies";
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const perPage = searchParams.get("per_page") || "200";
 
-export async function GET(_req: NextRequest) {
-  const res = await fetch(`${BACKEND_BASE}${COMPANIES_PATH}`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    // kalau butuh auth, tambah di sini
-  });
+  const incomingAuth = req.headers.get("authorization");
+  const cookieToken =
+    req.cookies.get("access_token")?.value ||
+    req.cookies.get("token")?.value ||
+    null;
 
-  let data: any = null;
-  try {
-    data = await res.json();
-  } catch (e) {
-    data = [];
+  // 🔴 DEBUG: lihat apa yang kita punya
+  console.log("[COMPANIES] incoming Authorization →", incomingAuth);
+  console.log("[COMPANIES] cookie access_token →", cookieToken);
+
+  if (!incomingAuth && !cookieToken) {
+    return NextResponse.json(
+      { message: "Unauthorized: token missing" },
+      { status: 401 }
+    );
   }
 
-  return NextResponse.json(data, { status: res.status });
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // pakai urutan: header dulu, baru cookie
+  if (incomingAuth) {
+    headers["Authorization"] = incomingAuth;
+  } else if (cookieToken) {
+    // kebanyakan backend pakai Bearer
+    headers["Authorization"] = `Bearer ${cookieToken}`;
+  }
+
+  const backendUrl = `${BACKEND_API_URL}/companies?per_page=${encodeURIComponent(
+    perPage
+  )}`;
+
+  const backendRes = await fetch(backendUrl, {
+    method: "GET",
+    headers,
+  });
+
+  const rawText = await backendRes.text();
+
+  // 🔴 DEBUG: lihat respon backend
+  console.log("[COMPANIES] backend status →", backendRes.status);
+  console.log("[COMPANIES] backend raw →", rawText);
+
+  let data: any;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    data = { raw: rawText };
+  }
+
+  return NextResponse.json(data, {
+    status: backendRes.status,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    },
+  });
 }

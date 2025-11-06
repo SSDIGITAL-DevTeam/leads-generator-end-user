@@ -2,13 +2,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_API_URL =
-  process.env.BACKEND_API_URL || "http://localhost:8080";
+  process.env.BACKEND_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:8080";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  // kirim ke backend asli
-  const res = await fetch(`${BACKEND_API_URL}/auth/login`, {
+  const resp = await fetch(`${BACKEND_API_URL}/auth/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -16,43 +16,62 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify(body),
   });
 
-  // coba baca data JSON dari backend
-  const data = await res.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({} as any));
 
-  // kalau login gagal, langsung terusin aja ke client
-  if (!res.ok) {
-    return NextResponse.json(data, { status: res.status });
+  // ⬇️ log di server kamu akan kelihatan ini
+  console.log("[LOGIN] backend status →", resp.status);
+  console.log("[LOGIN] backend data →", data);
+
+  if (!resp.ok) {
+    return NextResponse.json(data, { status: resp.status });
   }
 
-  // --- ambil token dari response backend ---
-  // seringnya backend kirim nama salah satu ini:
-  // { access_token: "..." } atau { token: "..." }
-  const token =
-    (data as any).access_token ||
-    (data as any).token ||
-    (data as any).jwt ||
-    null;
+  // --- cari token di berbagai bentuk yang umum ---
+  let token: string | null = null;
 
-  // bentuk response ke client
+  // 1) { access_token: "..." }
+  if (typeof (data as any).access_token === "string") {
+    token = (data as any).access_token;
+  }
+  // 2) { token: "..." }
+  else if (typeof (data as any).token === "string") {
+    token = (data as any).token;
+  }
+  // 3) { jwt: "..." }
+  else if (typeof (data as any).jwt === "string") {
+    token = (data as any).jwt;
+  }
+  // 4) { data: { access_token: "..." } }
+  else if (typeof (data as any)?.data?.access_token === "string") {
+    token = (data as any).data.access_token;
+  }
+  // 5) { token: { access: "..." } } → ini yang sering bikin invalid
+  else if (
+    typeof (data as any).token === "object" &&
+    typeof (data as any).token.access === "string"
+  ) {
+    token = (data as any).token.access;
+  }
+
   const nextRes = NextResponse.json(
     {
-      // boleh pilih apa yang mau kamu kirim ke frontend
-      // biasanya user-info saja, token jangan dikirim lagi
       user: (data as any).user ?? null,
       message: (data as any).message ?? "Login success",
     },
-    { status: res.status }
+    { status: 200 }
   );
 
-  // kalau token ada → simpan ke cookie
   if (token) {
+    console.log("[LOGIN] save cookie access_token →", token);
     nextRes.cookies.set("access_token", token, {
       httpOnly: true,
       path: "/",
       sameSite: "lax",
-      // secure: true, // aktifkan kalau sudah pakai https
-      // maxAge: 60 * 60 * 24, // 1 hari
+      maxAge: 60 * 60 * 24,
+      // secure: true, // on HTTPS
     });
+  } else {
+    console.log("[LOGIN] no token found, cookie NOT set");
   }
 
   return nextRes;

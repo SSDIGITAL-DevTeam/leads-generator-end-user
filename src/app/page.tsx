@@ -38,84 +38,162 @@ const LandingPage = () => {
   }, [pageSize]);
 
   const handleScrape = async () => {
-    setScrapeError(null);
+  setScrapeError(null);
 
-    const payload = {
-      type_business: (filters.businessType || "").trim(),
-      city: city.trim(),
-      country: country.trim(),
-      min_rating: filters.rating ? Number(filters.rating) : 0,
-      max_pages: 1,
-    };
+  const payload = {
+    type_business: (filters.businessType || "").trim(),
+    city: city.trim(),
+    country: country.trim(),
+    min_rating: filters.rating ? Number(filters.rating) : 0,
+    max_pages: 1,
+  };
 
-    // debug biar kelihatan sekarang keisi
-    console.log("[CLIENT] scrape payload →", payload);
+  console.log("[CLIENT] scrape payload →", payload);
 
-    setScraping(true);
-    try {
-      const scrapRes = await fetch("/api/scrape", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+  setScraping(true);
+  try {
+    // 1) trigger scraping di backend
+    const scrapRes = await fetch("/api/scrape", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
 
-      const rawText = await scrapRes.text();
-      console.log("[CLIENT] scrape status →", scrapRes.status);
-      console.log("[CLIENT] scrape raw →", rawText);
+    const scrapText = await scrapRes.text();
+    console.log("[CLIENT] scrape status →", scrapRes.status);
+    console.log("[CLIENT] scrape raw →", scrapText);
 
+    // walau scrape baliknya cuma message, kita lanjut ke langkah 2
+    if (!scrapRes.ok) {
       let scrapJson: any = {};
       try {
-        scrapJson = JSON.parse(rawText);
+        scrapJson = JSON.parse(scrapText);
       } catch {
-        scrapJson = { raw: rawText };
+        scrapJson = { raw: scrapText };
       }
-
-      if (!scrapRes.ok) {
-        throw new Error(
-          scrapJson.message ||
-            scrapJson.error ||
-            `Scrape failed (${scrapRes.status})`
-        );
-      }
-
-      const rows: any[] = Array.isArray(scrapJson)
-        ? scrapJson
-        : scrapJson.data
-        ? scrapJson.data
-        : scrapJson.items
-        ? scrapJson.items
-        : [];
-
-      const normalized = rows.map((item: any, idx: number) => ({
-        id: item.id ?? `scraped-${idx + 1}`,
-        name: item.name ?? item.company ?? "",
-        company: item.company ?? item.name ?? "",
-        email: item.email ?? "",
-        phone: item.phone ?? item.phone_number ?? "",
-        country: item.country ?? payload.country ?? "",
-        city: item.city ?? payload.city ?? "",
-        rating:
-          typeof item.rating === "number"
-            ? item.rating
-            : typeof item.min_rating === "number"
-            ? item.min_rating
-            : payload.min_rating,
-        businessType: item.type_business ?? payload.type_business ?? "",
-        website: item.website ?? "",
-      }));
-
-      setBackendData(normalized);
-      setCurrentPage(1);
-    } catch (err: any) {
-      console.error("[CLIENT] scrape error →", err);
-      setScrapeError(err.message || "Scraping gagal");
-      setBackendData([]);
-    } finally {
-      setScraping(false);
+      throw new Error(
+        scrapJson.message ||
+          scrapJson.error ||
+          `Scrape failed (${scrapRes.status})`
+      );
     }
+
+    // 2) setelah scrape berhasil, ambil semua companies
+    const companiesRes = await fetch("/api/companies?per_page=200", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    const companiesText = await companiesRes.text();
+    console.log("[CLIENT] companies status →", companiesRes.status);
+    console.log("[CLIENT] companies raw →", companiesText);
+
+    if (!companiesRes.ok) {
+      let errJson: any = {};
+      try {
+        errJson = JSON.parse(companiesText);
+      } catch {
+        errJson = { raw: companiesText };
+      }
+      throw new Error(
+        errJson.message ||
+          errJson.error ||
+          `Fetch companies failed (${companiesRes.status})`
+      );
+    }
+
+    let companiesJson: any = {};
+    try {
+      companiesJson = JSON.parse(companiesText);
+    } catch {
+      companiesJson = { data: [] };
+    }
+
+    // 3) normalisasi bentuk data backend
+    // seringnya backend balikin { data: [...] } atau langsung array
+    const rows: any[] = Array.isArray(companiesJson)
+      ? companiesJson
+      : companiesJson.data
+      ? companiesJson.data
+      : companiesJson.items
+      ? companiesJson.items
+      : [];
+
+    const normalized = rows.map((item: any, idx: number) => {
+  // rating bisa string "5.0" atau number
+  const ratingNum =
+    typeof item.rating === "number"
+      ? item.rating
+      : item.rating
+      ? Number(item.rating)
+      : payload.min_rating;
+
+  // ⬇️ ini penting: tarik semua kemungkinan sumber reviews
+  const reviewsVal =
+    typeof item.reviews === "number"
+      ? item.reviews
+      : typeof item.user_ratings_total === "number"
+      ? item.user_ratings_total
+      : typeof item.views === "number"
+      ? item.views
+      : null;
+
+  return {
+    id: item.id ?? `company-${idx + 1}`,
+    // nama/perusahaan
+    name: item.name ?? item.company ?? "",
+    company: item.company ?? item.name ?? "",
+    // kontak
+    phone: item.phone ?? item.formatted_phone_number ?? "",
+    email: item.email ?? "",
+    // website/link
+    website: item.website ?? item.url ?? "",
+    // angka
+    rating: ratingNum,
+    reviews: reviewsVal,          // ⬅️ sekarang dikirim ke tabel
+    // bisnis
+    type_business:
+      item.type_business ??
+      item.business_type ??
+      payload.type_business ??
+      "",
+    businessType:
+      item.type_business ??
+      item.business_type ??
+      payload.type_business ??
+      "",
+    // alamat & lokasi
+    address:
+      item.address ??
+      item.formatted_address ??
+      item.place_address ??
+      "",
+    country: item.country ?? payload.country ?? "",
+    city: item.city ?? payload.city ?? "",
+    location:
+      item.city && item.country
+        ? `${item.city}, ${item.country}`
+        : item.city ?? item.country ?? "",
+    // simpan aslinya kalau perlu
+    raw: item,
   };
+});
+
+
+    setBackendData(normalized);
+    setCurrentPage(1);
+  } catch (err: any) {
+    console.error("[CLIENT] scrape/companies error →", err);
+    setScrapeError(err.message || "Scraping / fetch companies gagal");
+    setBackendData([]);
+  } finally {
+    setScraping(false);
+  }
+};
 
   const sourceData = backendData.length > 0 ? backendData : [];
 

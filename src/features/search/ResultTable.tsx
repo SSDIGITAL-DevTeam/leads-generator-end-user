@@ -18,7 +18,6 @@ interface ResultTableProps {
 export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
   const [search, setSearch] = useState("");
 
-  // filter lokal
   const filtered = useMemo(() => {
     if (!search.trim()) return data;
     const q = search.trim().toLowerCase();
@@ -34,9 +33,13 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         "";
       const typeBusiness =
         (lead as any).type_business?.toLowerCase?.() ??
+        (lead as any).businessType?.toLowerCase?.() ??
+        (lead as any).business_type?.toLowerCase?.() ??
         lead.industry?.toLowerCase?.() ??
         "";
       const loc = formatLocation(lead).toLowerCase();
+      const address =
+        ((lead as any).address as string | undefined)?.toLowerCase?.() ?? "";
 
       return (
         company.includes(q) ||
@@ -45,36 +48,30 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         phone.includes(q) ||
         website.includes(q) ||
         typeBusiness.includes(q) ||
-        loc.includes(q)
+        loc.includes(q) ||
+        address.includes(q)
       );
     });
   }, [data, search]);
 
-  // kolom disamakan dengan project lain
   const columns = useMemo(
     () => [
-      // 1. Company → di project lain dia pakai lead.name sebagai judul
       {
         key: "company-col",
         header: "Company",
         render: (lead: BusinessLead) => (
           <p className="text-sm font-semibold text-slate-900">
-            {/* project lain pakai lead.name di kolom company */}
             {lead.name || lead.company || "-"}
           </p>
         ),
       },
-      // 2. Phone
       {
         key: "phone",
         header: "Phone",
         render: (lead: BusinessLead) => (
-          <span className="text-sm text-slate-700">
-            {lead.phone || "-"}
-          </span>
+          <span className="text-sm text-slate-700">{lead.phone || "-"}</span>
         ),
       },
-      // 3. Links → project lain cuma munculin website
       {
         key: "links",
         header: "Links",
@@ -105,35 +102,58 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
           );
         },
       },
-      // 4. Rating
       {
         key: "rating",
         header: "Rating",
-        render: (lead: BusinessLead) => (
-          <span className="text-sm text-slate-700">
-            {typeof lead.rating === "number"
-              ? lead.rating.toFixed(1)
-              : lead.rating || "0.0"}
-          </span>
-        ),
+        render: (lead: BusinessLead) => {
+          const raw = (lead as any).rating;
+          if (typeof raw === "number") {
+            return <span className="text-sm text-slate-700">{raw.toFixed(1)}</span>;
+          }
+          if (typeof raw === "string" && raw.trim() !== "") {
+            return <span className="text-sm text-slate-700">{raw}</span>;
+          }
+          return <span className="text-sm text-slate-400">0.0</span>;
+        },
       },
-      // 5. Reviews
       {
-        key: "reviews",
-        header: "Reviews",
-        render: (lead: BusinessLead) => (
-          <span className="text-sm text-slate-700">
-            {(lead as any).reviews ?? "-"}
-          </span>
-        ),
-      },
-      // 6. Type Bussiness
+  key: "reviews",
+  header: "Reviews",
+  render: (lead: BusinessLead) => {
+    // kumpulkan semua kemungkinan sumber angka reviews
+    const raw =
+      (lead as any).reviews ??
+      (lead as any).review_count ??
+      (lead as any).views ??
+      (lead as any).raw?.reviews ??
+      (lead as any).raw?.review_count ??
+      (lead as any).raw?.views ??
+      null;
+
+    // pola yang sama seperti rating:
+    if (typeof raw === "number") {
+      // kalau mau pakai pemisah seribu:
+      // return <span className="text-sm text-slate-700">{raw.toLocaleString()}</span>;
+      return <span className="text-sm text-slate-700">{raw}</span>;
+    }
+
+    if (typeof raw === "string" && raw.trim() !== "") {
+      return <span className="text-sm text-slate-700">{raw}</span>;
+    }
+
+    return <span className="text-sm text-slate-400">-</span>;
+  },
+},
       {
         key: "type_business",
         header: "Type Bussiness",
         render: (lead: BusinessLead) => {
           const typeB =
-            (lead as any).type_business || lead.industry || lead.title;
+            (lead as any).type_business ||
+            (lead as any).businessType ||
+            (lead as any).business_type ||
+            lead.industry ||
+            lead.title;
           return typeB ? (
             <Badge>{typeB}</Badge>
           ) : (
@@ -141,7 +161,6 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
           );
         },
       },
-      // 7. Address → di project lain dia pakai lead.company di kolom ini
       {
         key: "address",
         header: "Address",
@@ -151,7 +170,6 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
           </span>
         ),
       },
-      // 8. Location
       {
         key: "location",
         header: "Location",
@@ -182,7 +200,6 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         </div>
 
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          {/* search */}
           <div className="relative w-full md:w-72">
             <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
               <svg
@@ -205,7 +222,6 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
             />
           </div>
 
-          {/* download */}
           <Button
             type="button"
             className="rounded-md !bg-[#2451CC] px-4 py-4 text-sm font-semibold text-white shadow-sm transition"
@@ -213,7 +229,6 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
               const rows =
                 fullData && fullData.length > 0 ? fullData : filtered;
 
-              // header disamakan dengan tabel project lain
               const csvHeader = [
                 "Company",
                 "Phone",
@@ -240,22 +255,32 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
                     (lead as any).links?.website ||
                     (lead as any).linkedin ||
                     "";
+                  const ratingVal =
+                    typeof (lead as any).rating === "number"
+                      ? (lead as any).rating.toFixed(1)
+                      : (lead as any).rating || "";
+                  const reviewsVal =
+                    (lead as any).reviews ??
+                    (lead as any).review_count ??
+                    (lead as any).views ??
+                    (lead as any).raw?.reviews ??
+                    (lead as any).raw?.review_count ??
+                    (lead as any).raw?.views ??
+                    "";
+                  const typeBVal =
+                    (lead as any).type_business ||
+                    (lead as any).businessType ||
+                    (lead as any).business_type ||
+                    lead.industry ||
+                    lead.title ||
+                    "";
                   return [
                     escape(lead.name || lead.company || ""),
                     escape(lead.phone || ""),
                     escape(website),
-                    escape(
-                      typeof lead.rating === "number"
-                        ? lead.rating.toFixed(1)
-                        : lead.rating || ""
-                    ),
-                    escape((lead as any).reviews ?? ""),
-                    escape(
-                      (lead as any).type_business ||
-                        lead.industry ||
-                        lead.title ||
-                        ""
-                    ),
+                    escape(ratingVal),
+                    escape(reviewsVal),
+                    escape(typeBVal),
                     escape((lead as any).address || lead.company || ""),
                     escape(formatLocation(lead)),
                   ].join(",");
@@ -299,7 +324,6 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         </div>
       </div>
 
-      {/* tabel */}
       <DataTable
         data={filtered}
         columns={columns}

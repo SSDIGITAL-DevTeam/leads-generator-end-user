@@ -77,7 +77,7 @@ const RegisterPage = () => {
 
       // kalau sampai sini sukses → langsung login ke context
       await login({ email, password });
-      router.push("/pages/dashboard");
+      router.push("/dashboard");
     } catch (registrationError) {
       setError(
         registrationError instanceof Error

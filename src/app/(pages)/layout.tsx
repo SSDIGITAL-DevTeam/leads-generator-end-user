@@ -25,15 +25,18 @@ export default function PagesLayout({ children }: { children: ReactNode }) {
       {/* 2. SIDEBAR DESKTOP, MULAI DI BAWAH TOPBAR */}
       <aside
         className={cn(
-          "fixed left-0 z-40 hidden h-[calc(100vh-64px)] border-r border-slate-200 bg-white transition-all duration-200 lg:block",
+          "fixed left-0 z-40 hidden h-[calc(100vh-64px)] transition-all duration-200 lg:block",
+          // dark theme sama kayak Topbar
+          "bg-[#1F2430] text-white border-r border-white/10",
           isCollapsed ? "w-16" : "w-60"
         )}
-        style={{ top: TOPBAR_HEIGHT }} // supaya tidak nutup topbar
+        style={{ top: TOPBAR_HEIGHT }}
       >
+        {/* toggle collapse */}
         <button
           type="button"
           onClick={() => setIsCollapsed((prev) => !prev)}
-          className="absolute -right-3 top-6 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-xs shadow-sm"
+          className="absolute -right-3 top-6 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-[#1F2430] text-xs text-white/80 shadow-sm hover:bg-white/10"
         >
           {isCollapsed ? "›" : "‹"}
         </button>

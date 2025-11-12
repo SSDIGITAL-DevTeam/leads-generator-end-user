@@ -49,7 +49,7 @@ export const Topbar = ({ className }: { className?: string }) => {
             </div>
             <div className="leading-tight">
               <Link
-                href="/pages/dashboard"
+                href={"/pages/dashboard" as any}
                 className="text-sm font-semibold text-white md:text-base"
               >
                 Lead Generator

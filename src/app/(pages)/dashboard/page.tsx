@@ -25,156 +25,78 @@ const LandingPage = () => {
   const [scrapeError, setScrapeError] = useState<string | null>(null);
 
   const handleScrape = async () => {
-    setScrapeError(null);
+  console.groupCollapsed("🟦 [SCRAPE FLOW START]");
+  console.log("Step 1️⃣ - Mulai scraping process dari client...");
 
-    const businessType = (filters.businessType || "").trim();
-    const finalCountry = country.trim();
-    const finalCity = city.trim();
+  setScrapeError(null);
+  setBackendData([]);
+  setScraping(true);
 
-    // validasi client
-    if (!businessType) {
-      setScrapeError("Type business harus diisi dulu.");
-      return;
-    }
-    if (!finalCountry || !finalCity) {
-      setScrapeError("Country dan city harus diisi dulu.");
-      return;
-    }
+  const businessType = (filters.businessType || "").trim();
+  const finalCountry = country.trim();
+  const finalCity = city.trim();
 
-    const payload = {
-      type_business: businessType,
-      city: finalCity,
-      country: finalCountry,
-      min_rating: filters.rating ? Number(filters.rating) : 0,
-    };
+  if (!businessType || !finalCountry || !finalCity) {
+    console.warn("Step ⚠️ - Validasi gagal → field belum lengkap");
+    setScrapeError("Type business, country, dan city harus diisi.");
+    setScraping(false);
+    console.groupEnd();
+    return;
+  }
 
-    console.log("[CLIENT] scrape payload →", payload);
-
-    // ⬇️ kosongkan dulu supaya tabel tidak menampilkan data lama
-    setBackendData([]);
-    setScraping(true);
-
-    try {
-      // 1) jalankan scrape
-      const scrapRes = await fetch("/api/scrape", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const scrapJson = await scrapRes.json().catch(() => ({}));
-      console.log("[CLIENT] scrape status →", scrapRes.status);
-      console.log("[CLIENT] scrape json →", scrapJson);
-
-      if (!scrapRes.ok || scrapJson?.ok === false) {
-        const code = scrapJson?.code ?? scrapRes.status;
-        let userMsg =
-          scrapJson?.message ||
-          scrapJson?.detail?.message ||
-          "Gagal menjalankan scraping. Coba lagi.";
-
-        if (code === 401) {
-          userMsg =
-            "Sesi kamu sudah habis atau token tidak valid. Silakan login lagi.";
-        }
-
-        throw new Error(userMsg);
-      }
-
-      // 2) habis scrape → ambil semua companies
-      const companiesUrl = "/api/companies";
-      console.log("[CLIENT] akan fetch companies ke →", companiesUrl);
-
-      const companiesRes = await fetch(companiesUrl, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-      const companiesJson = await companiesRes.json().catch(() => ({}));
-      console.log("[CLIENT] companies status →", companiesRes.status);
-      console.log("[CLIENT] companies json →", companiesJson);
-
-      if (!companiesRes.ok || companiesJson?.ok === false) {
-        const code = companiesJson?.code ?? companiesRes.status;
-        let userMsg =
-          companiesJson?.message || "Gagal mengambil data hasil scraping.";
-
-        if (code === 401) {
-          userMsg = "Sesi kamu sudah habis. Silakan login lagi.";
-        }
-
-        throw new Error(userMsg);
-      }
-
-      // 3) normalisasi
-      const rows: any[] = Array.isArray(companiesJson)
-        ? companiesJson
-        : Array.isArray(companiesJson.data)
-        ? companiesJson.data
-        : Array.isArray(companiesJson.items)
-        ? companiesJson.items
-        : [];
-
-      console.log("[CLIENT] jumlah companies →", rows.length);
-
-      const normalized = rows.map((item: any, idx: number) => {
-        const ratingNum =
-          typeof item.rating === "number"
-            ? item.rating
-            : item.rating
-            ? Number(item.rating)
-            : payload.min_rating;
-
-        const reviewsVal =
-          typeof item.reviews === "number"
-            ? item.reviews
-            : typeof item.user_ratings_total === "number"
-            ? item.user_ratings_total
-            : typeof item.views === "number"
-            ? item.views
-            : null;
-
-        return {
-          id: item.id ?? `company-${idx + 1}`,
-          name: item.name ?? item.company ?? "",
-          company: item.company ?? item.name ?? "",
-          phone: item.phone ?? item.formatted_phone_number ?? "",
-          email: item.email ?? "",
-          website: item.website ?? item.url ?? "",
-          rating: ratingNum,
-          reviews: reviewsVal,
-          type_business:
-            item.type_business ??
-            item.business_type ??
-            payload.type_business ??
-            "",
-          businessType:
-            item.type_business ??
-            item.business_type ??
-            payload.type_business ??
-            "",
-          address:
-            item.address ?? item.formatted_address ?? item.place_address ?? "",
-          country: item.country ?? payload.country ?? "",
-          city: item.city ?? payload.city ?? "",
-          location:
-            item.city && item.country
-              ? `${item.city}, ${item.country}`
-              : item.city ?? item.country ?? "",
-          raw: item,
-        };
-      });
-
-      // ⬇️ baru kita taruh data ke tabel setelah semua sukses
-      setBackendData(normalized);
-    } catch (err: any) {
-      console.error("[CLIENT] scrape/companies error →", err);
-      setScrapeError(err.message || "Terjadi kesalahan.");
-      // tetap kosongkan biar gak balik ke data lama
-      setBackendData([]);
-    } finally {
-      setScraping(false);
-    }
+  const payload = {
+    type_business: businessType,
+    city: finalCity,
+    country: finalCountry,
+    min_rating: filters.rating ? Number(filters.rating) : 0,
   };
+
+  console.log("Step 2️⃣ - Payload dikirim ke /api/scrape:", payload);
+
+  try {
+    console.log("Step 3️⃣ - Hit ke /api/scrape...");
+    const scrapeRes = await fetch("/api/scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      credentials: "include", // penting biar cookie ikut
+    });
+
+    const scrapeJson = await scrapeRes.json().catch(() => ({}));
+    console.log("Step 4️⃣ - Response /api/scrape diterima:", scrapeJson);
+
+    if (!scrapeRes.ok || scrapeJson?.ok === false) {
+      throw new Error(scrapeJson?.message || "Scraping gagal di backend.");
+    }
+
+    console.log("Step 5️⃣ - Tunggu backend update database (3 detik)...");
+    await new Promise((res) => setTimeout(res, 3000));
+
+    console.log("Step 6️⃣ - Fetch /api/companies untuk hasil terbaru...");
+    const companiesRes = await fetch("/api/companies?per_page=200", {
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      credentials: "include",
+    });
+
+    const companiesJson = await companiesRes.json().catch(() => ({}));
+    console.log("Step 7️⃣ - Response /api/companies:", companiesJson);
+
+    const rows = Array.isArray(companiesJson)
+      ? companiesJson
+      : companiesJson.data || companiesJson.items || [];
+
+    console.log(`Step 8️⃣ - Jumlah data hasil scraping: ${rows.length}`);
+
+    setBackendData(rows);
+  } catch (err: any) {
+    console.error("❌ ERROR FLOW:", err);
+    setScrapeError(err.message || "Terjadi kesalahan.");
+  } finally {
+    setScraping(false);
+    console.groupEnd();
+  }
+};
 
   // kalau masih scraping → kita kirim array kosong supaya tabel nggak nampilin data lama
   const sourceData = scraping

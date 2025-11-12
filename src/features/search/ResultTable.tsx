@@ -208,7 +208,7 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         header: "Action",
         render: (lead: BusinessLead) => (
           <Link
-            href={`/admin/leads/${lead.id}` as any}
+            href={`detail/${lead.id}` as any}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"

@@ -31,8 +31,8 @@ export const useProtectedRoute = (
 
     // kalau TIDAK butuh auth (misal di /login) tapi user SUDAH login
     if (!requireAuth && isAuthenticated) {
-      // default ke /dashboard
-      const target = (redirectTo ?? "/dashboard") as `/${string}`;
+      // default ke dashboard utama
+      const target = (redirectTo ?? "/pages/dashboard") as `/${string}`;
       router.replace(target as any);
     }
   }, [requireAuth, isAuthenticated, redirectTo, router, isLoading]);

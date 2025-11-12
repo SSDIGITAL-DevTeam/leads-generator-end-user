@@ -3,52 +3,58 @@ import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_BASE =
   process.env.BACKEND_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:8080"; // sesuaikan dengan backend kamu
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:8080";
 
 export async function GET(req: NextRequest) {
-  // ambil seluruh query dari request asli
-  const url = new URL(req.url);
-  const qs = url.searchParams.toString(); // contoh: "per_page=200&page=1"
-
-  // coba ambil token dari beberapa nama cookie
-  const cookieToken =
-    req.cookies.get("token")?.value ||
-    req.cookies.get("access_token")?.value ||
-    req.cookies.get("jwt")?.value ||
-    null;
-
-  // kalau user kirim Authorization di fetch dari browser, kita ikutkan
-  const headerAuth = req.headers.get("authorization");
-
-  // rakit URL backend lengkap + query
-  const backendUrl = `${BACKEND_BASE}/companies${qs ? `?${qs}` : ""}`;
-  // console.log("[API] forward ke backend:", backendUrl);
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-  };
-
-  // pilih sumber auth
-  if (headerAuth) {
-    headers["Authorization"] = headerAuth;
-  } else if (cookieToken) {
-    headers["Authorization"] = `Bearer ${cookieToken}`;
-  }
-
   try {
+    // Ambil seluruh query dari request asli
+    const url = new URL(req.url);
+    const qs = url.searchParams.toString();
+
+    // Ambil token
+    const cookieToken =
+      req.cookies.get("token")?.value ||
+      req.cookies.get("access_token")?.value ||
+      req.cookies.get("jwt")?.value ||
+      null;
+
+    const headerAuth = req.headers.get("authorization");
+
+    // Siapkan header
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+
+    if (headerAuth) {
+      headers["Authorization"] = headerAuth;
+    } else if (cookieToken) {
+      headers["Authorization"] = `Bearer ${cookieToken}`;
+    }
+
+    const backendUrl = `${BACKEND_BASE}/companies${qs ? `?${qs}` : ""}`;
+    console.log("[API /companies] Forward →", backendUrl);
+
+    // Fetch ke backend dengan no cache
     const res = await fetch(backendUrl, {
       method: "GET",
       headers,
-      cache: "no-store",
+      cache: "no-store", // penting: cegah caching di edge/runtime
+      next: { revalidate: 0 }, // pastikan revalidate 0 di Next.js 15
     });
 
-    const data = await res.json().catch(() => null);
+    const text = await res.text();
+    let data: any = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
 
-    // forward status & body persis
     return NextResponse.json(data, {
       status: res.status,
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": "no-store, must-revalidate",
       },
     });
   } catch (err: any) {

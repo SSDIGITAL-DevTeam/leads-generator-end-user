@@ -14,7 +14,7 @@ const RegisterPage = () => {
   const { login } = useAuth();
   const { isLoading } = useProtectedRoute({
     requireAuth: false,
-    redirectTo: "/dashboard",
+    redirectTo: "/pages/dashboard",
   });
 
   const [formState, setFormState] = useState({
@@ -77,7 +77,7 @@ const RegisterPage = () => {
 
       // kalau sampai sini sukses → langsung login ke context
       await login({ email, password });
-      router.push("/dashboard");
+      router.push("/pages/dashboard");
     } catch (registrationError) {
       setError(
         registrationError instanceof Error

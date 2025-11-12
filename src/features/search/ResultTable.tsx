@@ -10,6 +10,7 @@ import type { BusinessLead } from "@/types/business";
 import Image from "next/image";
 // pakai pagination yang sama dengan yang kamu pakai di page.tsx
 import { Pagination } from "@/_components/ui/Pagination";
+import Link from "next/link";
 
 interface ResultTableProps {
   data: BusinessLead[];
@@ -109,7 +110,9 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
-              aria-label={`Visit ${lead.company || lead.name || "lead"} website`}
+              aria-label={`Visit ${
+                lead.company || lead.name || "lead"
+              } website`}
             >
               <Image
                 src="/assets/icons/link.svg"
@@ -128,7 +131,9 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
         render: (lead: BusinessLead) => {
           const raw = (lead as any).rating;
           if (typeof raw === "number") {
-            return <span className="text-sm text-slate-700">{raw.toFixed(1)}</span>;
+            return (
+              <span className="text-sm text-slate-700">{raw.toFixed(1)}</span>
+            );
           }
           if (typeof raw === "string" && raw.trim() !== "") {
             return <span className="text-sm text-slate-700">{raw}</span>;
@@ -198,6 +203,38 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
           </div>
         ),
       },
+      {
+        key: "actions",
+        header: "Action",
+        render: (lead: BusinessLead) => (
+          <Link
+            href={`/admin/leads/${lead.id}` as any}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+            aria-label={`Open detail for ${
+              lead.company || lead.name || "lead"
+            }`}
+            title="View detail"
+          >
+            {/* Eye icon (24x24) */}
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+            >
+              <path
+                d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </Link>
+        ),
+      },
     ],
     []
   );
@@ -262,7 +299,7 @@ export const ResultTable = ({ data, total, fullData }: ResultTableProps) => {
                 if (val === null || val === undefined) return "";
                 const str = String(val);
                 return /[",\n]/.test(str)
-                  ? `"${str.replace(/"/g, '""')}"` 
+                  ? `"${str.replace(/"/g, '""')}"`
                   : str;
               };
 

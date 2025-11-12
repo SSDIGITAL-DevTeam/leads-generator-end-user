@@ -1,3 +1,4 @@
+// src/app/api/prompt-search/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_API_URL =
@@ -35,12 +36,12 @@ export async function POST(req: NextRequest) {
     "Content-Type": "application/json",
   };
 
+  // pilih sumber auth
   if (incomingAuth) {
     headers["Authorization"] = incomingAuth;
   } else if (cookieToken) {
-    // sesuaikan prefix token backend-mu di sini
+    // kalau backend pakai "Token " ganti ke `Token`
     headers["Authorization"] = `Bearer ${cookieToken}`;
-    // headers["Authorization"] = `Token ${cookieToken}`;
   }
 
   try {

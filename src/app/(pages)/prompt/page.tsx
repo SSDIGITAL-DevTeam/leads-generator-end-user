@@ -9,14 +9,16 @@ import { useAuth } from "@/features/auth/useAuth";
 import { useModal } from "@/hooks/useModal";
 import { cn } from "@/lib/utils";
 import { ResultTable } from "@/features/search/ResultTable";
-import { businessLeads } from "@/lib/mockData";
 import type { BusinessLead } from "@/types/business";
+
+// opsional: hapus mock default biar tidak “-1 step”
+const EMPTY: BusinessLead[] = [];
 
 const PromptPage = () => {
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [results, setResults] = useState<BusinessLead[]>(businessLeads);
+  const [results, setResults] = useState<BusinessLead[]>(EMPTY);
 
   const { isAuthenticated } = useAuth();
   const { isOpen, open, close } = useModal(false);
@@ -29,9 +31,9 @@ const PromptPage = () => {
     return false;
   };
 
-  // fungsi kecil buat nyamain struktur dari backend ke BusinessLead
-  const normalizePromptRows = (rows: any[]): BusinessLead[] => {
-    return rows.map((item, idx) => {
+  // normalisasi hasil backend ke bentuk BusinessLead
+  const normalizePromptRows = (rows: any[]): BusinessLead[] =>
+    rows.map((item: any, idx: number) => {
       const ratingNum =
         typeof item.rating === "number"
           ? item.rating
@@ -60,13 +62,11 @@ const PromptPage = () => {
         company: item.company ?? item.name ?? "",
         phone: item.phone ?? item.formatted_phone_number ?? "",
         email: item.email ?? "",
-        // kadang backend kirim website/url
         links: {
           website: item.website ?? item.url ?? undefined,
         },
         rating: ratingNum,
         reviews: reviewsVal,
-        // semua variasi biar tabelmu aman
         type_business:
           item.type_business ??
           item.business_type ??
@@ -78,11 +78,9 @@ const PromptPage = () => {
         country,
         city,
         location,
-        // simpan raw kalau mau dipakai
         raw: item,
       } as BusinessLead;
     });
-  };
 
   const handlePromptSubmit = async () => {
     setError(null);
@@ -95,25 +93,22 @@ const PromptPage = () => {
       return;
     }
 
+    // kosongkan hasil agar tidak menampilkan data step sebelumnya
+    setResults(EMPTY);
+
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/prompt-search", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: trimmed }),
       });
 
       const json = await res.json().catch(() => ({}));
       console.log("[PROMPT] client got →", json);
 
-      // kalau token mati dari backend
       if (!res.ok || json?.ok === false) {
-        // kalau backend kita balikin 401 → buka modal login
-        if (res.status === 401 || json?.code === 401) {
-          open();
-        }
+        if (res.status === 401 || json?.code === 401) open();
         setError(
           json?.message ||
             "Gagal menjalankan prompt search. Coba lagi beberapa saat."
@@ -121,7 +116,6 @@ const PromptPage = () => {
         return;
       }
 
-      // backend kadang bisa balikin: [] atau {data: []} atau {items: []}
       const rows: any[] = Array.isArray(json)
         ? json
         : Array.isArray(json.data)
@@ -131,8 +125,7 @@ const PromptPage = () => {
         : [];
 
       const normalized = rows.length > 0 ? normalizePromptRows(rows) : [];
-      // kalau kosong banget, boleh fallback ke mock supaya UI gak blank
-      setResults(normalized.length > 0 ? normalized : []);
+      setResults(normalized);
     } catch (err) {
       console.error("[PROMPT] client error →", err);
       setError("Terjadi kesalahan ketika terhubung ke server prompt.");
@@ -143,6 +136,7 @@ const PromptPage = () => {
 
   return (
     <>
+      {/* Modal login */}
       <Modal
         isOpen={isOpen}
         onClose={close}
@@ -203,22 +197,19 @@ const PromptPage = () => {
                 Scrape
               </Button>
             </div>
+
             {error ? (
               <p className="text-xs text-red-500">{error}</p>
-            ) : (
+            ) : results.length === 0 ? (
               <p className="text-xs text-slate-400">
-                Prompt akan segera terhubung ke backend AI setelah siap.
+                Ketik prompt lalu klik Scrape untuk melihat hasil.
               </p>
-            )}
+            ) : null}
           </div>
         </section>
 
         <section className="rounded-2xl bg-white shadow-sm">
-          <ResultTable
-            data={results}
-            total={results.length}
-            fullData={results}
-          />
+          <ResultTable data={results} total={results.length} fullData={results} />
         </section>
       </div>
     </>
@@ -226,4 +217,3 @@ const PromptPage = () => {
 };
 
 export default PromptPage;
-  

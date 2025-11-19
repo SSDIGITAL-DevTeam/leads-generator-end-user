@@ -56,4 +56,48 @@ export const companiesService = {
       per_page: json.per_page ?? perPage,
     };
   },
+
+  async detail(id: string | number): Promise<CompanyApi | null> {
+    const res = await fetch(`${API_BASE}/api/companies/${id}`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        return null;
+      }
+      throw new Error("Failed to fetch company detail");
+    }
+
+    const json = await res.json().catch(() => ({}));
+    const payload = json?.data ?? json;
+    if (!payload) {
+      return null;
+    }
+
+    return normalizeCompany(payload, id);
+  },
+};
+
+const normalizeCompany = (
+  payload: Partial<CompanyApi> & Record<string, any>,
+  fallbackId: string | number
+): CompanyApi => {
+  const ratingValue = Number(payload?.rating);
+  return {
+    id: payload?.id ?? fallbackId,
+    name:
+      payload?.name ??
+      payload?.company ??
+      payload?.business_name ??
+      "Unknown Company",
+    email: payload?.email ?? undefined,
+    phone: payload?.phone ?? undefined,
+    address: payload?.address ?? payload?.location ?? undefined,
+    city: payload?.city ?? undefined,
+    country: payload?.country ?? undefined,
+    type_business:
+      payload?.type_business ?? payload?.businessType ?? payload?.industry,
+    rating: Number.isFinite(ratingValue) ? ratingValue : undefined,
+  };
 };
